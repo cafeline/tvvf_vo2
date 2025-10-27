@@ -26,6 +26,8 @@ namespace tvvf_vo_c
     // パブリッシャー初期化
     cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
     vector_field_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("tvvf_vo_vector_field", 10);
+    planned_path_pub_ = this->create_publisher<nav_msgs::msg::Path>("planned_path", 10);
+    goal_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("goal_marker", 10);
 
     // サブスクライバー初期化
     auto map_qos = rclcpp::QoS(1).reliable().transient_local();
@@ -34,6 +36,9 @@ namespace tvvf_vo_c
 
     clicked_point_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
         "clicked_point", 10, std::bind(&TVVFVONode::clicked_point_callback, this, std::placeholders::_1));
+
+    goal_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+        "goal_pose", 10, std::bind(&TVVFVONode::goal_pose_callback, this, std::placeholders::_1));
 
     // 障害物データをsubscribe（統合コールバック使用）
     dynamic_obstacles_sub_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(

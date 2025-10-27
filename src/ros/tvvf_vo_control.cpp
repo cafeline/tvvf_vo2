@@ -31,6 +31,7 @@ namespace tvvf_vo_c
       
       // 可視化を更新
       update_visualization();
+      publish_planned_path();
 
       // 制御コマンドを発行
       publish_control_command(control_output);
@@ -44,19 +45,21 @@ namespace tvvf_vo_c
 
   void TVVFVONode::publish_control_command(const ControlOutput &control_output)
   {
-    // ベクトル場からの速度指令を差動二輪の制約に変換
+    // 差動駆動用：desired_vx, desired_vyを変換
     double desired_vx = control_output.velocity_command.vx;
     double desired_vy = control_output.velocity_command.vy;
 
-    auto [linear_x, angular_z] = convert_to_differential_drive(
+    auto cmd_msg = geometry_msgs::msg::Twist();
+
+    // 差動駆動ロボットでは横移動不可能なので、変換関数を使用
+    auto [linear_vel, angular_vel] = convert_to_differential_drive(
         desired_vx, desired_vy, robot_state_->orientation);
 
+    cmd_msg.linear.x = linear_vel;
+    cmd_msg.linear.y = 0.0;  // 差動駆動では常に0
+    cmd_msg.angular.z = angular_vel;
 
-    auto cmd_msg = geometry_msgs::msg::Twist();
-    cmd_msg.linear.x = linear_x;
-    cmd_msg.angular.z = angular_z;
-
-    // 速度制限
+    // 速度制限（convert_to_differential_drive内で既に考慮されているが、念のため）
     double max_linear_vel = this->get_parameter("max_linear_velocity").as_double();
     double max_angular_vel = this->get_parameter("max_angular_velocity").as_double();
 
@@ -102,5 +105,59 @@ namespace tvvf_vo_c
     auto cmd_msg = geometry_msgs::msg::Twist();
     cmd_vel_pub_->publish(cmd_msg);
   }
+
+  void TVVFVONode::publish_planned_path()
+{
+  if (!robot_state_.has_value() || !goal_.has_value() || !current_map_.has_value()) {
+    return;
+  }
+
+  nav_msgs::msg::Path path_msg;
+  path_msg.header.frame_id = "map";
+  path_msg.header.stamp = this->now();
+
+  // 簡易パス：現在位置からゴールまでベクトル場に沿って統合
+  Position current_pos = robot_state_->position;
+  const int max_steps = 100;
+  const double step_size = 0.1;
+
+  for (int i = 0; i < max_steps; ++i) {
+    geometry_msgs::msg::PoseStamped pose;
+    pose.header.frame_id = "map";
+    pose.header.stamp = this->now();
+    pose.pose.position.x = current_pos.x;
+    pose.pose.position.y = current_pos.y;
+    pose.pose.position.z = 0.0;
+    pose.pose.orientation.w = 1.0;
+    path_msg.poses.push_back(pose);
+
+    // ゴール到達チェック
+    double dist_to_goal = std::sqrt(
+        std::pow(goal_->position.x - current_pos.x, 2) +
+        std::pow(goal_->position.y - current_pos.y, 2));
+    
+    if (dist_to_goal < goal_->tolerance) {
+      break;
+    }
+
+    // ベクトル場から次の位置を計算
+    if (global_field_generator_ && global_field_generator_->isStaticFieldReady()) {
+      std::vector<DynamicObstacle> empty_obstacles;  // 簡易実装：動的障害物なし
+      auto field_vector = global_field_generator_->getVelocityAt(current_pos, empty_obstacles);
+      double norm = std::sqrt(field_vector[0] * field_vector[0] + field_vector[1] * field_vector[1]);
+
+      if (norm > 0.001) {
+        current_pos.x += (field_vector[0] / norm) * step_size;
+        current_pos.y += (field_vector[1] / norm) * step_size;
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  planned_path_pub_->publish(path_msg);
+}
 
 } // namespace tvvf_vo_c

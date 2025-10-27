@@ -4,8 +4,11 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
+#include <nav_msgs/msg/path.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
+#include <visualization_msgs/msg/marker.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -62,10 +65,13 @@ private:
     // パブリッシャー
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr vector_field_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr planned_path_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr goal_marker_pub_;
 
     // サブスクライバー
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr clicked_point_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_sub_;
     rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr dynamic_obstacles_sub_;
     rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr static_obstacles_sub_;
 
@@ -95,6 +101,12 @@ private:
      * @param msg PointStampedメッセージ
      */
     void clicked_point_callback(const geometry_msgs::msg::PointStamped::SharedPtr msg);
+
+    /**
+     * @brief ゴールポーズをゴールとして設定
+     * @param msg PoseStampedメッセージ
+     */
+    void goal_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
     /**
      * @brief 地図データコールバック
@@ -157,7 +169,8 @@ private:
     void apply_repulsive_force(std::array<double, 2>& velocity_vector);
     void scale_velocity_vector(std::array<double, 2>& velocity_vector);
     void update_visualization();
-    
+    void publish_planned_path();
+
 private:
     // 可視化ヘルパー関数
     std::array<double, 2> calculate_combined_vector(
