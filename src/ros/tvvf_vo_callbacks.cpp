@@ -9,17 +9,8 @@ namespace tvvf_vo_c
     Position goal_position(msg->point.x, msg->point.y);
     goal_ = Goal(goal_position, this->get_parameter("goal_tolerance").as_double());
 
-    // GlobalFieldGeneratorで静的場を再計算
-    if (current_map_.has_value() && global_field_generator_) {
-      global_field_generator_->precomputeStaticField(current_map_.value(), goal_position);
-    } else {
-      if (!current_map_.has_value()) {
-        RCLCPP_WARN(this->get_logger(), "No map available for static field computation");
-      }
-      if (!global_field_generator_) {
-        RCLCPP_ERROR(this->get_logger(), "GlobalFieldGenerator not initialized");
-      }
-    }
+    request_static_field_update();
+    try_recompute_static_field();
 
     RCLCPP_INFO(this->get_logger(), "Goal set from clicked_point: (%.2f, %.2f)",
                 goal_position.x, goal_position.y);
@@ -30,17 +21,8 @@ namespace tvvf_vo_c
     Position goal_position(msg->pose.position.x, msg->pose.position.y);
     goal_ = Goal(goal_position, this->get_parameter("goal_tolerance").as_double());
 
-    // GlobalFieldGeneratorで静的場を再計算
-    if (current_map_.has_value() && global_field_generator_) {
-      global_field_generator_->precomputeStaticField(current_map_.value(), goal_position);
-    } else {
-      if (!current_map_.has_value()) {
-        RCLCPP_WARN(this->get_logger(), "No map available for static field computation");
-      }
-      if (!global_field_generator_) {
-        RCLCPP_ERROR(this->get_logger(), "GlobalFieldGenerator not initialized");
-      }
-    }
+    request_static_field_update();
+    try_recompute_static_field();
 
     RCLCPP_INFO(this->get_logger(), "Goal set from goal_pose: (%.2f, %.2f)",
                 goal_position.x, goal_position.y);
@@ -75,7 +57,8 @@ namespace tvvf_vo_c
     
     // GlobalFieldGeneratorで静的場を再計算（ゴールが設定されている場合）
     if (goal_.has_value() && global_field_generator_) {
-      global_field_generator_->precomputeStaticField(*msg, goal_->position);
+      request_static_field_update();
+      try_recompute_static_field();
     }
   }
 

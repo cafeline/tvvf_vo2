@@ -2,12 +2,28 @@
 
 #include <gtest/gtest.h>
 #include "tvvf_vo_c/core/global_field_generator.hpp"
+#include "tvvf_vo_c/core/region_utils.hpp"
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <chrono>
 #include <cmath>
 
 using namespace tvvf_vo_c;
 
+TEST(PlanningRegionTest, IncludesMarginAndWidth) {
+    Position start(0.0, 0.0);
+    Position goal(10.0, -2.0);
+    const double path_width = 6.0;
+    const double margin = 5.0;
+
+    auto region = create_path_region(start, goal, path_width, margin);
+
+    EXPECT_NEAR(region.min.x, -8.0, 1e-6);   // 0 - (3 + 5)
+    EXPECT_NEAR(region.max.x, 18.0, 1e-6);   // 10 + (3 + 5)
+    EXPECT_NEAR(region.min.y, -10.0, 1e-6);  // -2 - (3 + 5)
+    EXPECT_NEAR(region.max.y, 8.0, 1e-6);    // 0 + (3 + 5)
+    EXPECT_TRUE(region.contains(start));
+    EXPECT_TRUE(region.contains(goal));
+}
 class GlobalFieldGeneratorTest : public ::testing::Test {
 protected:
     GlobalFieldGenerator generator;
@@ -36,6 +52,23 @@ TEST_F(GlobalFieldGeneratorTest, PrecomputeStaticField) {
     auto field = generator.generateField({});
     EXPECT_EQ(field.width, 20);
     EXPECT_EQ(field.height, 20);
+}
+
+TEST_F(GlobalFieldGeneratorTest, CropsStaticFieldToRegion) {
+    Position goal(4.0, 4.0);
+    FieldRegion region(Position(2.0, 3.0), Position(6.0, 7.0));
+
+    generator.precomputeStaticField(test_map, goal, region);
+    auto field = generator.generateField({});
+
+    EXPECT_EQ(field.width, 8);   // (6-2)/0.5 = 8 cells
+    EXPECT_EQ(field.height, 8);  // (7-3)/0.5 = 8 cells
+    EXPECT_NEAR(field.origin.x, 2.0, 1e-6);
+    EXPECT_NEAR(field.origin.y, 3.0, 1e-6);
+    ASSERT_TRUE(field.region.has_value());
+    EXPECT_NEAR(field.region->min.x, 2.0, 1e-6);
+    EXPECT_NEAR(field.region->max.x, 6.0, 1e-6);
+    EXPECT_TRUE(field.region->contains(Position(4.0, 4.0)));
 }
 
 // TEST 2: 動的障害物なしの場合

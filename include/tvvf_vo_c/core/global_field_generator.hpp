@@ -6,9 +6,11 @@
 #include "tvvf_vo_c/core/field_types.hpp"
 #include "tvvf_vo_c/core/wavefront_expander.hpp"
 #include "tvvf_vo_c/core/fast_marching.hpp"
+#include "tvvf_vo_c/core/region_utils.hpp"
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <memory>
 #include <vector>
+#include <optional>
 
 namespace tvvf_vo_c {
 
@@ -16,10 +18,14 @@ class GlobalFieldGenerator {
 public:
     GlobalFieldGenerator();
     ~GlobalFieldGenerator() = default;
+
+    void setDynamicRepulsionEnabled(bool enable);
+    bool isDynamicRepulsionEnabled() const { return enable_dynamic_repulsion_; }
     
     // 静的ベクトル場の事前計算
     void precomputeStaticField(const nav_msgs::msg::OccupancyGrid& map,
-                                const Position& goal);
+                                const Position& goal,
+                                const std::optional<FieldRegion>& region = std::nullopt);
     
     // 動的障害物を考慮したベクトル場生成
     VectorField generateField(const std::vector<DynamicObstacle>& obstacles);
@@ -44,6 +50,7 @@ private:
     VectorField static_field_;
     double last_computation_time_;
     bool static_field_computed_;
+    bool enable_dynamic_repulsion_;
     
     // ヘルパー関数
     std::array<double, 2> computeTotalRepulsiveForce(

@@ -48,6 +48,7 @@ tvvf_vo_c_node:
     
     # 制御関連
     goal_tolerance: 0.1         # ゴール許容誤差 [m]
+    vector_field_path_width: 4.0 # パス幅 [m]
     
     # 斥力パラメータ（静的障害物用）
     repulsive_strength: 1.0         # 斥力の強度

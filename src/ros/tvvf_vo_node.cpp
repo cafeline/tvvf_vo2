@@ -1,10 +1,11 @@
 #include "tvvf_vo_c/ros/tvvf_vo_node.hpp"
 #include <chrono>
+#include <algorithm>
 
 namespace tvvf_vo_c
 {
 
-  TVVFVONode::TVVFVONode() : Node("tvvf_vo_c_node")
+  TVVFVONode::TVVFVONode() : Node("tvvf_vo_c_node"), field_update_pending_(false)
   {
     // パラメータ設定
     setup_parameters();
@@ -14,6 +15,7 @@ namespace tvvf_vo_c
     
     // グローバルフィールドジェネレータ初期化
     global_field_generator_ = std::make_unique<GlobalFieldGenerator>();
+    global_field_generator_->setDynamicRepulsionEnabled(enable_global_repulsion_);
     
     // 斥力計算器初期化
     repulsive_force_calculator_ = std::make_unique<RepulsiveForceCalculator>();
@@ -72,10 +74,12 @@ namespace tvvf_vo_c
 
     // 制御関連
     this->declare_parameter("goal_tolerance", 0.1);
+    this->declare_parameter("vector_field_path_width", 4.0);
     
     // 斥力パラメータ
     this->declare_parameter("repulsive_strength", 1.0);
     this->declare_parameter("repulsive_influence_range", 2.0);
+    this->declare_parameter("enable_global_repulsion", true);
     
   }
 
@@ -89,8 +93,70 @@ namespace tvvf_vo_c
     // 斥力設定の読み込み
     repulsive_config_.repulsive_strength = this->get_parameter("repulsive_strength").as_double();
     repulsive_config_.influence_range = this->get_parameter("repulsive_influence_range").as_double();
+    enable_global_repulsion_ = this->get_parameter("enable_global_repulsion").as_bool();
 
     return config;
+  }
+
+  void TVVFVONode::request_static_field_update()
+  {
+    field_update_pending_ = true;
+  }
+
+  bool TVVFVONode::try_recompute_static_field()
+  {
+    if (!field_update_pending_) {
+      return true;
+    }
+
+    if (!goal_.has_value()) {
+      field_update_pending_ = false;
+      return true;
+    }
+
+    if (!current_map_.has_value() || !global_field_generator_) {
+      return false;
+    }
+
+    if (!robot_state_.has_value()) {
+      if (!update_robot_state()) {
+        return false;
+      }
+    }
+
+    auto region = build_planning_region();
+
+    try {
+      global_field_generator_->precomputeStaticField(
+          current_map_.value(), goal_->position, region);
+      field_update_pending_ = false;
+      return true;
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to compute static field: %s", e.what());
+      return false;
+    }
+  }
+
+  std::optional<FieldRegion> TVVFVONode::build_planning_region() const
+  {
+    if (!goal_.has_value() || !robot_state_.has_value()) {
+      return std::nullopt;
+    }
+
+    const double path_width = std::max(get_path_width_parameter(), 0.0);
+    return create_path_region(
+        robot_state_->position,
+        goal_->position,
+        path_width,
+        REGION_MARGIN_METERS);
+  }
+
+  double TVVFVONode::get_path_width_parameter() const
+  {
+    if (!this->has_parameter("vector_field_path_width")) {
+      return 0.0;
+    }
+    return this->get_parameter("vector_field_path_width").as_double();
   }
 
 } // namespace tvvf_vo_c

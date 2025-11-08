@@ -20,6 +20,10 @@ namespace tvvf_vo_c
         return;
       }
 
+      if (field_update_pending_) {
+        try_recompute_static_field();
+      }
+
       // 目標到達チェック
       if (is_goal_reached()) {
         handle_goal_reached();

@@ -31,6 +31,7 @@ namespace tvvf_vo_c
   {
     publish_stop_command();
     goal_.reset();
+    field_update_pending_ = false;
     publish_empty_visualization();
     RCLCPP_INFO(this->get_logger(), "Goal reached");
   }

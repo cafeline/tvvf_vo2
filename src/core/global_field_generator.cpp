@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <algorithm>
+#include <optional>
 
 namespace tvvf_vo_c {
 
@@ -21,25 +22,113 @@ namespace {
     // パフォーマンス最適化
     constexpr double INFLUENCE_RADIUS_SQ = INFLUENCE_RADIUS * INFLUENCE_RADIUS;
     constexpr double MIN_DISTANCE_SQ = MIN_DISTANCE * MIN_DISTANCE;
+
+    struct CroppedMapResult {
+        nav_msgs::msg::OccupancyGrid map;
+        FieldRegion region;
+    };
+
+    std::optional<CroppedMapResult> cropOccupancyGrid(
+        const nav_msgs::msg::OccupancyGrid& map,
+        const FieldRegion& requested_region) {
+        
+        if (!requested_region.is_valid() || map.info.width == 0 || map.info.height == 0) {
+            return std::nullopt;
+        }
+
+        const double resolution = map.info.resolution;
+        const double origin_x = map.info.origin.position.x;
+        const double origin_y = map.info.origin.position.y;
+        const int map_width = static_cast<int>(map.info.width);
+        const int map_height = static_cast<int>(map.info.height);
+
+        int min_x_index = static_cast<int>(std::floor((requested_region.min.x - origin_x) / resolution));
+        int max_x_index = static_cast<int>(std::ceil((requested_region.max.x - origin_x) / resolution)) - 1;
+        int min_y_index = static_cast<int>(std::floor((requested_region.min.y - origin_y) / resolution));
+        int max_y_index = static_cast<int>(std::ceil((requested_region.max.y - origin_y) / resolution)) - 1;
+
+        if (max_x_index < 0 || min_x_index >= map_width ||
+            max_y_index < 0 || min_y_index >= map_height) {
+            return std::nullopt;
+        }
+
+        min_x_index = std::clamp(min_x_index, 0, map_width - 1);
+        max_x_index = std::clamp(max_x_index, 0, map_width - 1);
+        min_y_index = std::clamp(min_y_index, 0, map_height - 1);
+        max_y_index = std::clamp(max_y_index, 0, map_height - 1);
+
+        if (min_x_index > max_x_index || min_y_index > max_y_index) {
+            return std::nullopt;
+        }
+
+        nav_msgs::msg::OccupancyGrid submap = map;
+        submap.info.width = static_cast<uint32_t>(max_x_index - min_x_index + 1);
+        submap.info.height = static_cast<uint32_t>(max_y_index - min_y_index + 1);
+        submap.info.origin.position.x = origin_x + min_x_index * resolution;
+        submap.info.origin.position.y = origin_y + min_y_index * resolution;
+        submap.data.resize(submap.info.width * submap.info.height);
+
+        for (uint32_t y = 0; y < submap.info.height; ++y) {
+            for (uint32_t x = 0; x < submap.info.width; ++x) {
+                const int original_x = static_cast<int>(min_x_index + x);
+                const int original_y = static_cast<int>(min_y_index + y);
+                submap.data[y * submap.info.width + x] =
+                    map.data[original_y * map_width + original_x];
+            }
+        }
+
+        const double aligned_min_x = submap.info.origin.position.x;
+        const double aligned_min_y = submap.info.origin.position.y;
+        const double aligned_max_x = aligned_min_x + submap.info.width * resolution;
+        const double aligned_max_y = aligned_min_y + submap.info.height * resolution;
+
+        return CroppedMapResult{
+            submap,
+            FieldRegion(
+                Position(aligned_min_x, aligned_min_y),
+                Position(aligned_max_x, aligned_max_y)
+            )
+        };
+    }
 }
 
 // コンストラクタ
 GlobalFieldGenerator::GlobalFieldGenerator() 
-    : last_computation_time_(0.0), static_field_computed_(false) {
+    : last_computation_time_(0.0),
+      static_field_computed_(false),
+      enable_dynamic_repulsion_(true) {
     wavefront_expander_ = std::make_unique<WavefrontExpander>();
     fast_marching_ = std::make_unique<FastMarching>();
 }
 
+void GlobalFieldGenerator::setDynamicRepulsionEnabled(bool enable) {
+    enable_dynamic_repulsion_ = enable;
+}
+
 // 静的場の事前計算
 void GlobalFieldGenerator::precomputeStaticField(const nav_msgs::msg::OccupancyGrid& map,
-                                                  const Position& goal) {
+                                                  const Position& goal,
+                                                  const std::optional<FieldRegion>& region) {
+    nav_msgs::msg::OccupancyGrid cropped_map;
+    const nav_msgs::msg::OccupancyGrid* map_ptr = &map;
+    std::optional<FieldRegion> applied_region = std::nullopt;
+
+    if (region.has_value()) {
+        if (auto cropped = cropOccupancyGrid(map, region.value())) {
+            cropped_map = std::move(cropped->map);
+            applied_region = cropped->region;
+            map_ptr = &cropped_map;
+        }
+    }
+
     // Fast Marching Methodを使用して静的場を計算
-    fast_marching_->initializeFromOccupancyGrid(map);
+    fast_marching_->initializeFromOccupancyGrid(*map_ptr);
     fast_marching_->computeDistanceField(goal);
     fast_marching_->generateVectorField();
     
     // 静的場を保存
     static_field_ = fast_marching_->getField();
+    static_field_.region = applied_region;
     static_field_computed_ = true;
 }
 
@@ -58,6 +147,12 @@ VectorField GlobalFieldGenerator::generateField(const std::vector<DynamicObstacl
         last_computation_time_ = std::chrono::duration<double>(end - start).count();
         return static_field_;
     }
+
+    if (!enable_dynamic_repulsion_) {
+        auto end = std::chrono::high_resolution_clock::now();
+        last_computation_time_ = std::chrono::duration<double>(end - start).count();
+        return static_field_;
+    }
     
     // 動的障害物の影響をブレンド
     VectorField result = blendWithDynamicObstacles(static_field_, obstacles);
@@ -71,6 +166,10 @@ VectorField GlobalFieldGenerator::generateField(const std::vector<DynamicObstacl
 // 動的障害物の影響をブレンド
 VectorField GlobalFieldGenerator::blendWithDynamicObstacles(const VectorField& static_field,
                                                             const std::vector<DynamicObstacle>& obstacles) {
+    if (!enable_dynamic_repulsion_) {
+        return static_field;
+    }
+
     // フィールドをコピー
     VectorField blended_field = static_field;
     
@@ -209,6 +308,9 @@ std::array<double, 2> GlobalFieldGenerator::getVelocityAt(const Position& positi
     
     // 動的障害物からの斥力
     if (!obstacles.empty()) {
+        if (!enable_dynamic_repulsion_) {
+            return static_vector;
+        }
         auto repulsive_force = computeTotalRepulsiveForce(position, obstacles);
         
         // 斥力が有意な場合のみブレンド

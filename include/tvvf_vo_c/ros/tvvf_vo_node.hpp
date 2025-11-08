@@ -16,6 +16,7 @@
 #include "tvvf_vo_c/core/types.hpp"
 #include "tvvf_vo_c/core/global_field_generator.hpp"
 #include "tvvf_vo_c/core/repulsive_force.hpp"
+#include "tvvf_vo_c/core/region_utils.hpp"
 #include <memory>
 #include <vector>
 #include <optional>
@@ -50,6 +51,7 @@ private:
     std::unique_ptr<RepulsiveForceCalculator> repulsive_force_calculator_;
     TVVFVOConfig config_;
     RepulsiveForceConfig repulsive_config_;
+    bool enable_global_repulsion_{true};
 
     // 状態変数
     std::optional<RobotState> robot_state_;
@@ -57,6 +59,7 @@ private:
     std::vector<DynamicObstacle> dynamic_obstacles_;
     std::optional<nav_msgs::msg::OccupancyGrid> current_map_;
     std::optional<visualization_msgs::msg::MarkerArray> static_obstacles_;
+    bool field_update_pending_;
     
     // TF2関連
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -160,6 +163,8 @@ private:
     void publish_combined_field_visualization(const VectorField& field);
 
 private:
+    static constexpr double REGION_MARGIN_METERS = 5.0;
+
     // 制御ループヘルパー関数
     bool update_robot_state();
     bool has_valid_goal() const;
@@ -170,6 +175,10 @@ private:
     void scale_velocity_vector(std::array<double, 2>& velocity_vector);
     void update_visualization();
     void publish_planned_path();
+    void request_static_field_update();
+    bool try_recompute_static_field();
+    std::optional<FieldRegion> build_planning_region() const;
+    double get_path_width_parameter() const;
 
 private:
     // 可視化ヘルパー関数
