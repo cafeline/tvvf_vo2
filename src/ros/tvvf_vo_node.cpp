@@ -12,11 +12,11 @@ namespace tvvf_vo_c
 
     // 設定初期化
     config_ = create_config_from_parameters();
-    
+
     // グローバルフィールドジェネレータ初期化
     global_field_generator_ = std::make_unique<GlobalFieldGenerator>();
     global_field_generator_->setDynamicRepulsionEnabled(enable_global_repulsion_);
-    
+
     // 斥力計算器初期化
     repulsive_force_calculator_ = std::make_unique<RepulsiveForceCalculator>();
     repulsive_force_calculator_->setConfig(repulsive_config_);
@@ -26,7 +26,7 @@ namespace tvvf_vo_c
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     // パブリッシャー初期化
-    cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+    cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel_raw", 10);
     vector_field_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("tvvf_vo_vector_field", 10);
     planned_path_pub_ = this->create_publisher<nav_msgs::msg::Path>("planned_path", 10);
     goal_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("goal_marker", 10);
@@ -44,15 +44,13 @@ namespace tvvf_vo_c
 
     // 障害物データをsubscribe（統合コールバック使用）
     dynamic_obstacles_sub_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(
-        "dynamic_obstacles", 10, 
+        "dynamic_obstacles", 10,
         [this](const visualization_msgs::msg::MarkerArray::SharedPtr msg) { obstacles_callback(msg, true); });
-    
+
     // 静的障害物データをsubscribe
     static_obstacles_sub_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(
         "static_obstacles", 10,
-        [this](const visualization_msgs::msg::MarkerArray::SharedPtr msg) { 
-            static_obstacles_ = *msg;
-        });
+        std::bind(&TVVFVONode::static_obstacles_callback, this, std::placeholders::_1));
 
     // タイマー初期化（制御ループ：20Hz）
     control_timer_ = this->create_wall_timer(
@@ -75,12 +73,13 @@ namespace tvvf_vo_c
     // 制御関連
     this->declare_parameter("goal_tolerance", 0.1);
     this->declare_parameter("vector_field_path_width", 4.0);
-    
+    this->declare_parameter("vector_field_publish_interval", 0.2);
+
     // 斥力パラメータ
     this->declare_parameter("repulsive_strength", 1.0);
     this->declare_parameter("repulsive_influence_range", 2.0);
     this->declare_parameter("enable_global_repulsion", true);
-    
+
   }
 
   TVVFVOConfig TVVFVONode::create_config_from_parameters()
@@ -89,11 +88,13 @@ namespace tvvf_vo_c
 
     config.max_linear_velocity = this->get_parameter("max_linear_velocity").as_double();
     config.max_angular_velocity = this->get_parameter("max_angular_velocity").as_double();
-    
+
     // 斥力設定の読み込み
     repulsive_config_.repulsive_strength = this->get_parameter("repulsive_strength").as_double();
     repulsive_config_.influence_range = this->get_parameter("repulsive_influence_range").as_double();
     enable_global_repulsion_ = this->get_parameter("enable_global_repulsion").as_bool();
+    vector_field_publish_interval_ = std::max(0.0, this->get_parameter("vector_field_publish_interval").as_double());
+    RCLCPP_INFO(this->get_logger(), "Vector field publish interval set to %.3f [s]", vector_field_publish_interval_);
 
     return config;
   }

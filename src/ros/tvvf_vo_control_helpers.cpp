@@ -66,9 +66,9 @@ namespace tvvf_vo_c
 
   void TVVFVONode::apply_repulsive_force(std::array<double, 2>& velocity_vector)
   {
-    if (static_obstacles_.has_value() && repulsive_force_calculator_) {
-      const auto repulsive_force = repulsive_force_calculator_->calculateTotalForce(
-          robot_state_->position, static_obstacles_.value());
+    if (static_obstacle_cache_ready_ && repulsive_force_calculator_) {
+      const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromPositions(
+          robot_state_->position, static_obstacle_positions_cache_);
       velocity_vector[0] += repulsive_force.x;
       velocity_vector[1] += repulsive_force.y;
     }
@@ -83,12 +83,34 @@ namespace tvvf_vo_c
 
   void TVVFVONode::update_visualization()
   {
-    if (this->count_subscribers("tvvf_vo_vector_field") > 0) {
-      const VectorField global_field = global_field_generator_->generateField(dynamic_obstacles_);
-      if (global_field.width > 0 && global_field.height > 0) {
-        publish_combined_field_visualization(global_field);
-      }
+    if (this->count_subscribers("tvvf_vo_vector_field") == 0) {
+      return;
     }
+
+    const auto now = this->get_clock()->now();
+    if (!is_vector_field_publish_due(now)) {
+      return;
+    }
+
+    const VectorField global_field = global_field_generator_->generateField(dynamic_obstacles_);
+    if (global_field.width > 0 && global_field.height > 0) {
+      publish_combined_field_visualization(global_field);
+      last_vector_field_publish_time_ = now;
+    }
+  }
+
+  bool TVVFVONode::is_vector_field_publish_due(const rclcpp::Time& now) const
+  {
+    if (vector_field_publish_interval_ <= 0.0) {
+      return true;
+    }
+
+    if (last_vector_field_publish_time_.nanoseconds() == 0) {
+      return true;
+    }
+
+    const double elapsed = (now - last_vector_field_publish_time_).seconds();
+    return elapsed >= vector_field_publish_interval_;
   }
 
 } // namespace tvvf_vo_c

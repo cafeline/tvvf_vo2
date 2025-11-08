@@ -62,6 +62,23 @@ namespace tvvf_vo_c
     }
   }
 
+  void TVVFVONode::static_obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg)
+  {
+    static_obstacles_ = *msg;
+    update_static_obstacle_cache(*msg);
+  }
+
+  void TVVFVONode::update_static_obstacle_cache(const visualization_msgs::msg::MarkerArray& msg)
+  {
+    if (repulsive_force_calculator_) {
+      static_obstacle_positions_cache_ = repulsive_force_calculator_->extractObstaclePositions(msg);
+      static_obstacle_cache_ready_ = true;
+    } else {
+      static_obstacle_positions_cache_.clear();
+      static_obstacle_cache_ready_ = false;
+    }
+  }
+
   void TVVFVONode::obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg, bool is_dynamic)
   {
     if (!is_dynamic) {

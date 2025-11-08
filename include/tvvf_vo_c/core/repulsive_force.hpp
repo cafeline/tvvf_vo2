@@ -66,6 +66,16 @@ public:
      */
     Vector2D calculateTotalForce(const Position& robot_pos, 
                                  const visualization_msgs::msg::MarkerArray& marker_array) const;
+
+    /**
+     * @brief 事前に抽出済みの障害物位置から総斥力を計算
+     * @param robot_pos ロボットの現在位置
+     * @param obstacles 障害物位置配列
+     * @return 総斥力ベクトル
+     */
+    Vector2D calculateTotalForceFromPositions(
+        const Position& robot_pos,
+        const std::vector<Position>& obstacles) const;
     
     /**
      * @brief 最大斥力を取得

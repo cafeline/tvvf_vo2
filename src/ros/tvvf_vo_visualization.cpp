@@ -1,5 +1,6 @@
 #include "tvvf_vo_c/ros/tvvf_vo_node.hpp"
 #include <cmath>
+#include <algorithm>
 
 namespace tvvf_vo_c
 {
@@ -34,7 +35,7 @@ namespace tvvf_vo_c
       marker_array.markers.push_back(delete_marker);
 
       int marker_id = 1;
-      
+
       // グリッドをサンプリングして可視化
       for (int y = 0; y < field.height; y += DEFAULT_GRID_STRIDE)
       {
@@ -42,21 +43,29 @@ namespace tvvf_vo_c
         {
           // ワールド座標に変換
           const Position world_pos = field.gridToWorld(x, y);
-          
+
           // 合成ベクトルを計算
           const auto combined_vector = calculate_combined_vector(field.vectors[y][x], world_pos);
-          
+
+          if (!is_valid_position(world_pos) || !is_valid_vector(combined_vector)) {
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(), *this->get_clock(), 2000,
+                "Skipping invalid vector field sample (pos=(%.3f, %.3f), vec=(%.3f, %.3f))",
+                world_pos.x, world_pos.y, combined_vector[0], combined_vector[1]);
+            continue;
+          }
+
           // ベクトルが小さすぎる場合はスキップ
           if (!should_visualize_vector(combined_vector)) {
             continue;
           }
-          
+
           // 矢印マーカーを作成して追加
           auto arrow_marker = create_arrow_marker(world_pos, combined_vector, marker_id++, global_frame);
           marker_array.markers.push_back(arrow_marker);
         }
       }
-      
+
       vector_field_pub_->publish(marker_array);
     }
     catch (const std::exception &e)
@@ -67,28 +76,38 @@ namespace tvvf_vo_c
 
   // ヘルパー関数: 合成ベクトルを計算
   std::array<double, 2> TVVFVONode::calculate_combined_vector(
-      const std::array<double, 2>& original_vector, 
+      const std::array<double, 2>& original_vector,
       const Position& world_pos) const
   {
     // 元のベクトル場の値
     std::array<double, 2> combined = original_vector;
-    
+
     // 斥力を追加
-    if (static_obstacles_.has_value() && repulsive_force_calculator_) {
-      const auto repulsive_force = repulsive_force_calculator_->calculateTotalForce(
-          world_pos, static_obstacles_.value());
+    if (static_obstacle_cache_ready_ && repulsive_force_calculator_) {
+      const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromPositions(
+          world_pos, static_obstacle_positions_cache_);
       combined[0] += repulsive_force.x;
       combined[1] += repulsive_force.y;
     }
-    
+
     return combined;
   }
 
   // ヘルパー関数: ベクトルを可視化すべきか判定
   bool TVVFVONode::should_visualize_vector(const std::array<double, 2>& vector) const
   {
-    return std::abs(vector[0]) > MIN_VECTOR_MAGNITUDE || 
+    return std::abs(vector[0]) > MIN_VECTOR_MAGNITUDE ||
            std::abs(vector[1]) > MIN_VECTOR_MAGNITUDE;
+  }
+
+  bool TVVFVONode::is_valid_position(const Position& position) const
+  {
+    return std::isfinite(position.x) && std::isfinite(position.y);
+  }
+
+  bool TVVFVONode::is_valid_vector(const std::array<double, 2>& vector) const
+  {
+    return std::isfinite(vector[0]) && std::isfinite(vector[1]);
   }
 
   // ヘルパー関数: 矢印マーカーを作成
@@ -104,41 +123,41 @@ namespace tvvf_vo_c
     marker.id = marker_id;
     marker.type = visualization_msgs::msg::Marker::ARROW;
     marker.action = visualization_msgs::msg::Marker::ADD;
-    
+
     // 矢印の始点と終点を設定
     geometry_msgs::msg::Point start, end;
     start.x = position.x;
     start.y = position.y;
     start.z = 0.0;
-    
+
     // ベクトルを正規化してから矢印の長さを適用
     const double magnitude = std::sqrt(vector[0] * vector[0] + vector[1] * vector[1]);
-    if (magnitude > MIN_VECTOR_MAGNITUDE) {
-      end.x = position.x + (vector[0] / magnitude) * DEFAULT_ARROW_LENGTH;
-      end.y = position.y + (vector[1] / magnitude) * DEFAULT_ARROW_LENGTH;
+    const double safe_magnitude = std::isfinite(magnitude) ? magnitude : 0.0;
+    if (safe_magnitude > MIN_VECTOR_MAGNITUDE) {
+      end.x = position.x + (vector[0] / safe_magnitude) * DEFAULT_ARROW_LENGTH;
+      end.y = position.y + (vector[1] / safe_magnitude) * DEFAULT_ARROW_LENGTH;
     } else {
       end.x = position.x + vector[0] * DEFAULT_ARROW_LENGTH;
       end.y = position.y + vector[1] * DEFAULT_ARROW_LENGTH;
     }
     end.z = 0.0;
-    
+
     marker.points.push_back(start);
     marker.points.push_back(end);
-    
+
     // 矢印のスケール設定
     marker.scale.x = ARROW_SHAFT_WIDTH;
     marker.scale.y = ARROW_HEAD_WIDTH;
     marker.scale.z = 0.0;
-    
+
     // 速度に基づく色設定（赤〜緑のグラデーション）
-    const double normalized_magnitude = std::min(magnitude, 1.0);
+    const double normalized_magnitude = std::clamp(safe_magnitude, 0.0, 1.0);
     marker.color.r = normalized_magnitude;
     marker.color.g = 1.0 - normalized_magnitude;
     marker.color.b = 0.0;
     marker.color.a = ARROW_ALPHA;
-    
-    marker.lifetime = rclcpp::Duration::from_seconds(MARKER_LIFETIME_SEC);
-    
+
+    marker.lifetime = rclcpp::Duration(0, 0);
     return marker;
   }
 

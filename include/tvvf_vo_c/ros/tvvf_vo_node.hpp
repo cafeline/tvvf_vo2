@@ -26,7 +26,7 @@ namespace tvvf_vo_c {
 
 // 可視化パラメータの定数
 namespace visualization_constants {
-    constexpr int DEFAULT_GRID_STRIDE = 5;           // グリッドサンプリング間隔
+    constexpr int DEFAULT_GRID_STRIDE = 2.5;           // グリッドサンプリング間隔
     constexpr double DEFAULT_ARROW_LENGTH = 0.3;     // 矢印の長さ[m]
     constexpr double ARROW_SHAFT_WIDTH = 0.05;       // 矢印シャフトの太さ
     constexpr double ARROW_HEAD_WIDTH = 0.1;         // 矢印ヘッドの太さ
@@ -59,8 +59,13 @@ private:
     std::vector<DynamicObstacle> dynamic_obstacles_;
     std::optional<nav_msgs::msg::OccupancyGrid> current_map_;
     std::optional<visualization_msgs::msg::MarkerArray> static_obstacles_;
+    std::vector<Position> static_obstacle_positions_cache_;
+    bool static_obstacle_cache_ready_{false};
+    double vector_field_publish_interval_{0.2};
+    rclcpp::Time last_vector_field_publish_time_;
+    int last_vector_field_marker_count_{0};
     bool field_update_pending_;
-    
+
     // TF2関連
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
@@ -123,6 +128,8 @@ private:
      * @param is_dynamic 動的障害物かどうか
      */
     void obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg, bool is_dynamic);
+    void static_obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg);
+    void update_static_obstacle_cache(const visualization_msgs::msg::MarkerArray& msg);
 
 
     /**
@@ -155,7 +162,7 @@ private:
      * @brief 空の可視化マーカーを送信（クリア用）
      */
     void publish_empty_visualization();
-    
+
     /**
      * @brief 合成ベクトル場の可視化（斥力込み）
      * @param field 元のベクトル場
@@ -174,6 +181,7 @@ private:
     void apply_repulsive_force(std::array<double, 2>& velocity_vector);
     void scale_velocity_vector(std::array<double, 2>& velocity_vector);
     void update_visualization();
+    bool is_vector_field_publish_due(const rclcpp::Time& now) const;
     void publish_planned_path();
     void request_static_field_update();
     bool try_recompute_static_field();
@@ -183,11 +191,13 @@ private:
 private:
     // 可視化ヘルパー関数
     std::array<double, 2> calculate_combined_vector(
-        const std::array<double, 2>& original_vector, 
+        const std::array<double, 2>& original_vector,
         const Position& world_pos) const;
-    
+
     bool should_visualize_vector(const std::array<double, 2>& vector) const;
-    
+    bool is_valid_position(const Position& position) const;
+    bool is_valid_vector(const std::array<double, 2>& vector) const;
+
     visualization_msgs::msg::Marker create_arrow_marker(
         const Position& position,
         const std::array<double, 2>& vector,

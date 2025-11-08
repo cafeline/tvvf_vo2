@@ -63,6 +63,13 @@ Vector2D RepulsiveForceCalculator::calculateTotalForce(
     // 障害物位置を抽出
     auto obstacles = extractObstaclePositions(marker_array);
     
+    return calculateTotalForceFromPositions(robot_pos, obstacles);
+}
+
+Vector2D RepulsiveForceCalculator::calculateTotalForceFromPositions(
+    const Position& robot_pos,
+    const std::vector<Position>& obstacles) const {
+
     // 全障害物からの斥力を合成
     Vector2D total_force(0.0, 0.0);
     
