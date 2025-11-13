@@ -12,6 +12,7 @@ namespace tvvf_vo_c
 
     // 設定初期化
     config_ = create_config_from_parameters();
+    map_obstacles_dirty_ = true;
 
     // グローバルフィールドジェネレータ初期化
     global_field_generator_ = std::make_unique<GlobalFieldGenerator>();
@@ -28,6 +29,7 @@ namespace tvvf_vo_c
     // パブリッシャー初期化
     cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel_raw", 10);
     vector_field_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("tvvf_vo_vector_field", 10);
+    map_obstacles_marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("map_static_obstacles_markers", 10);
     planned_path_pub_ = this->create_publisher<nav_msgs::msg::Path>("planned_path", 10);
     goal_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("goal_marker", 10);
 
@@ -79,6 +81,12 @@ namespace tvvf_vo_c
     this->declare_parameter("repulsive_strength", 1.0);
     this->declare_parameter("repulsive_influence_range", 2.0);
     this->declare_parameter("enable_global_repulsion", true);
+    this->declare_parameter("map_repulsion_enabled", false);
+    this->declare_parameter("map_repulsion_max_distance", 6.0);
+    this->declare_parameter("map_repulsion_sampling_step", 0.5);
+    this->declare_parameter("map_repulsion_recompute_distance", 1.0);
+    this->declare_parameter("map_repulsion_occupancy_threshold", 50);
+    this->declare_parameter("publish_map_obstacle_markers", true);
 
   }
 
@@ -93,6 +101,23 @@ namespace tvvf_vo_c
     repulsive_config_.repulsive_strength = this->get_parameter("repulsive_strength").as_double();
     repulsive_config_.influence_range = this->get_parameter("repulsive_influence_range").as_double();
     enable_global_repulsion_ = this->get_parameter("enable_global_repulsion").as_bool();
+    enable_map_repulsion_ = this->get_parameter("map_repulsion_enabled").as_bool();
+
+    map_repulsion_settings_.max_distance = this->get_parameter("map_repulsion_max_distance").as_double();
+    map_repulsion_settings_.sampling_step = this->get_parameter("map_repulsion_sampling_step").as_double();
+    if (map_repulsion_settings_.sampling_step <= 0.0) {
+      map_repulsion_settings_.sampling_step = 0.5;
+    }
+    const int occupancy_threshold =
+        this->get_parameter("map_repulsion_occupancy_threshold").as_int();
+    map_repulsion_settings_.occupancy_threshold = static_cast<int8_t>(
+        std::clamp(occupancy_threshold, 0, 100));
+
+    map_repulsion_recompute_distance_ =
+        std::max(0.1, this->get_parameter("map_repulsion_recompute_distance").as_double());
+    map_repulsion_recompute_distance_sq_ =
+        map_repulsion_recompute_distance_ * map_repulsion_recompute_distance_;
+    publish_map_obstacle_markers_ = this->get_parameter("publish_map_obstacle_markers").as_bool();
     vector_field_publish_interval_ = std::max(0.0, this->get_parameter("vector_field_publish_interval").as_double());
     RCLCPP_INFO(this->get_logger(), "Vector field publish interval set to %.3f [s]", vector_field_publish_interval_);
 

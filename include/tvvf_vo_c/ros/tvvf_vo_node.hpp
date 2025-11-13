@@ -16,6 +16,7 @@
 #include "tvvf_vo_c/core/types.hpp"
 #include "tvvf_vo_c/core/global_field_generator.hpp"
 #include "tvvf_vo_c/core/repulsive_force.hpp"
+#include "tvvf_vo_c/core/map_repulsion.hpp"
 #include "tvvf_vo_c/core/region_utils.hpp"
 #include <memory>
 #include <vector>
@@ -51,7 +52,10 @@ private:
     std::unique_ptr<RepulsiveForceCalculator> repulsive_force_calculator_;
     TVVFVOConfig config_;
     RepulsiveForceConfig repulsive_config_;
+    MapRepulsionSettings map_repulsion_settings_;
     bool enable_global_repulsion_{true};
+    bool enable_map_repulsion_{false};
+    bool publish_map_obstacle_markers_{false};
 
     // 状態変数
     std::optional<RobotState> robot_state_;
@@ -59,8 +63,14 @@ private:
     std::vector<DynamicObstacle> dynamic_obstacles_;
     std::optional<nav_msgs::msg::OccupancyGrid> current_map_;
     std::optional<visualization_msgs::msg::MarkerArray> static_obstacles_;
+    std::optional<visualization_msgs::msg::MarkerArray> external_static_obstacles_;
+    std::optional<visualization_msgs::msg::MarkerArray> map_static_obstacles_;
     std::vector<Position> static_obstacle_positions_cache_;
     bool static_obstacle_cache_ready_{false};
+    bool map_obstacles_dirty_{false};
+    std::optional<Position> last_map_repulsion_center_;
+    double map_repulsion_recompute_distance_{1.0};
+    double map_repulsion_recompute_distance_sq_{1.0};
     double vector_field_publish_interval_{0.2};
     rclcpp::Time last_vector_field_publish_time_;
     int last_vector_field_marker_count_{0};
@@ -73,6 +83,7 @@ private:
     // パブリッシャー
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr vector_field_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr map_obstacles_marker_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr planned_path_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr goal_marker_pub_;
 
@@ -130,6 +141,9 @@ private:
     void obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg, bool is_dynamic);
     void static_obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg);
     void update_static_obstacle_cache(const visualization_msgs::msg::MarkerArray& msg);
+    void update_combined_static_obstacles();
+    void refresh_map_obstacle_cache(const Position& robot_pos);
+    void publish_map_obstacle_markers(const visualization_msgs::msg::MarkerArray& markers);
 
 
     /**

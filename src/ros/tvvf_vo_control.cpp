@@ -15,6 +15,8 @@ namespace tvvf_vo_c
         return;
       }
 
+      refresh_map_obstacle_cache(robot_state_->position);
+
       // ゴールのチェック
       if (!has_valid_goal()) {
         return;

@@ -80,6 +80,26 @@ ament_target_dependencies(test_repulsive_force
     Eigen3
 )
 
+# Map Repulsionテスト
+ament_add_gtest(test_map_repulsion
+    test_map_repulsion.cpp
+)
+
+target_include_directories(test_map_repulsion PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_map_repulsion
+    ${PROJECT_NAME}_core
+)
+
+ament_target_dependencies(test_map_repulsion
+    rclcpp
+    nav_msgs
+    geometry_msgs
+    Eigen3
+)
+
 # カバレッジ計測の設定
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
