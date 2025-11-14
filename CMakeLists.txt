@@ -35,11 +35,11 @@ include_directories(include)
 # Core library
 add_library(${PROJECT_NAME}_core
   src/core/types.cpp
-  src/core/wavefront_expander.cpp
   src/core/fast_marching.cpp
   src/core/global_field_generator.cpp
   src/core/repulsive_force.cpp
   src/core/map_repulsion.cpp
+  src/core/cost_map_builder.cpp
   src/ros/tvvf_vo_node.cpp
   src/ros/tvvf_vo_callbacks.cpp
   src/ros/tvvf_vo_control.cpp

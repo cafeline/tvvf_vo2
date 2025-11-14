@@ -53,6 +53,7 @@ private:
     TVVFVOConfig config_;
     RepulsiveForceConfig repulsive_config_;
     MapRepulsionSettings map_repulsion_settings_;
+    CostMapSettings cost_map_settings_;
     bool enable_global_repulsion_{true};
     bool enable_map_repulsion_{false};
     bool publish_map_obstacle_markers_{false};

@@ -1,25 +1,5 @@
 # test/CMakeLists.txt
 
-# Wavefront Expanderテスト
-ament_add_gtest(test_wavefront_expander
-    test_wavefront_expander.cpp
-)
-
-target_include_directories(test_wavefront_expander PUBLIC
-    ${CMAKE_SOURCE_DIR}/include
-)
-
-target_link_libraries(test_wavefront_expander
-    ${PROJECT_NAME}_core
-)
-
-ament_target_dependencies(test_wavefront_expander
-    rclcpp
-    nav_msgs
-    geometry_msgs
-    Eigen3
-)
-
 # Fast Marchingテスト
 ament_add_gtest(test_fast_marching
     test_fast_marching.cpp
@@ -34,6 +14,26 @@ target_link_libraries(test_fast_marching
 )
 
 ament_target_dependencies(test_fast_marching
+    rclcpp
+    nav_msgs
+    geometry_msgs
+    Eigen3
+)
+
+# Cost Map Builderテスト
+ament_add_gtest(test_cost_map_builder
+    test_cost_map_builder.cpp
+)
+
+target_include_directories(test_cost_map_builder PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_cost_map_builder
+    ${PROJECT_NAME}_core
+)
+
+ament_target_dependencies(test_cost_map_builder
     rclcpp
     nav_msgs
     geometry_msgs

@@ -2,10 +2,10 @@
 
 #include <gtest/gtest.h>
 #include "tvvf_vo_c/core/fast_marching.hpp"
-#include "tvvf_vo_c/core/wavefront_expander.hpp"
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <chrono>
 #include <cmath>
+#include <vector>
 
 using namespace tvvf_vo_c;
 
@@ -96,37 +96,22 @@ TEST_F(FastMarchingTest, ObstacleBypassAccuracy) {
     EXPECT_LT(field.grid[5][9].distance, 10.0); // 妥当な範囲
 }
 
-// TEST 5: Wavefrontとの比較テスト
-TEST_F(FastMarchingTest, CompareWithWavefront) {
-    // Given: 同じマップで両方のアルゴリズムを実行
-    WavefrontExpander wavefront;
-    wavefront.initializeFromOccupancyGrid(test_map);
-    fmm.initializeFromOccupancyGrid(test_map);
-    Position goal(2.5, 2.5);  // グリッド中央（5,5）に対応
-    
-    // When: 両方で距離場を計算
-    wavefront.computeDistanceField(goal);
+TEST_F(FastMarchingTest, VariableSpeedInfluencesDistance) {
+    std::vector<double> speed_layer(test_map.data.size(), 1.0);
+    const int slow_column = 5;
+    for (int y = 0; y < static_cast<int>(test_map.info.height); ++y) {
+        speed_layer[y * test_map.info.width + slow_column] = 0.25;
+    }
+
+    fmm.initializeFromOccupancyGrid(test_map, speed_layer);
+    Position goal(0.0, 0.0);
     fmm.computeDistanceField(goal);
-    
-    // Then: FMMの方が精度が高い（特に対角線）
-    auto wf_field = wavefront.getField();
-    auto fmm_field = fmm.getField();
-    
-    // 対角線上の点(0,0)で比較
-    double wf_dist = wf_field.grid[0][0].distance;
-    double fmm_dist = fmm_field.grid[0][0].distance;
-    double true_dist = std::sqrt(2.5*2.5 + 2.5*2.5);  // ワールド座標での距離
-    
-    // 両方とも有効な距離を持っているか確認
-    ASSERT_FALSE(std::isinf(wf_dist)) << "Wavefront distance is infinite";
-    ASSERT_FALSE(std::isinf(fmm_dist)) << "FMM distance is infinite";
-    
-    // FMMの方が真の距離に近い
-    EXPECT_LT(std::abs(fmm_dist - true_dist), 
-              std::abs(wf_dist - true_dist));
+
+    auto field = fmm.getField();
+    EXPECT_GT(field.grid[5][slow_column].distance, field.grid[5][slow_column - 1].distance);
 }
 
-// TEST 6: パフォーマンステスト
+// TEST 5: パフォーマンステスト
 TEST_F(FastMarchingTest, PerformanceTest) {
     // Given: 大きめのマップ（20x20）
     nav_msgs::msg::OccupancyGrid large_map;
@@ -148,10 +133,4 @@ TEST_F(FastMarchingTest, PerformanceTest) {
     // Then: 50ms以内に完了
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     EXPECT_LT(duration.count(), 50);
-}
-
-// メイン関数
-int main(int argc, char **argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
 }

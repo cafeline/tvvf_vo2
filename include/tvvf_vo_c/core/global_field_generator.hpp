@@ -4,9 +4,9 @@
 #define TVVF_VO_C_CORE_GLOBAL_FIELD_GENERATOR_HPP_
 
 #include "tvvf_vo_c/core/field_types.hpp"
-#include "tvvf_vo_c/core/wavefront_expander.hpp"
 #include "tvvf_vo_c/core/fast_marching.hpp"
 #include "tvvf_vo_c/core/region_utils.hpp"
+#include "tvvf_vo_c/core/cost_map_builder.hpp"
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <memory>
 #include <vector>
@@ -21,6 +21,8 @@ public:
 
     void setDynamicRepulsionEnabled(bool enable);
     bool isDynamicRepulsionEnabled() const { return enable_dynamic_repulsion_; }
+    void setCostMapSettings(const CostMapSettings& settings);
+    const std::optional<CostMapResult>& getLastCostMap() const { return last_cost_map_result_; }
     
     // 静的ベクトル場の事前計算
     void precomputeStaticField(const nav_msgs::msg::OccupancyGrid& map,
@@ -45,12 +47,14 @@ public:
     bool isStaticFieldReady() const { return static_field_computed_; }
     
 private:
-    std::unique_ptr<WavefrontExpander> wavefront_expander_;
     std::unique_ptr<FastMarching> fast_marching_;
     VectorField static_field_;
     double last_computation_time_;
     bool static_field_computed_;
     bool enable_dynamic_repulsion_;
+    CostMapSettings cost_map_settings_;
+    CostMapBuilder cost_map_builder_;
+    std::optional<CostMapResult> last_cost_map_result_;
     
     // ヘルパー関数
     std::array<double, 2> computeTotalRepulsiveForce(

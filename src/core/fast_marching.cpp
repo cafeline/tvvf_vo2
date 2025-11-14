@@ -22,6 +22,18 @@ namespace {
 FastMarching::FastMarching() {}
 
 void FastMarching::initializeFromOccupancyGrid(const nav_msgs::msg::OccupancyGrid& map) {
+    initializeFromOccupancyGridImpl(map, nullptr);
+}
+
+void FastMarching::initializeFromOccupancyGrid(
+    const nav_msgs::msg::OccupancyGrid& map,
+    const std::vector<double>& speed_layer) {
+    initializeFromOccupancyGridImpl(map, &speed_layer);
+}
+
+void FastMarching::initializeFromOccupancyGridImpl(
+    const nav_msgs::msg::OccupancyGrid& map,
+    const std::vector<double>* speed_layer) {
     // フィールドメタデータの設定
     initializeFieldMetadata(map);
     
@@ -31,7 +43,12 @@ void FastMarching::initializeFromOccupancyGrid(const nav_msgs::msg::OccupancyGri
     // 各セルの初期化
     for (int y = 0; y < field_.height; ++y) {
         for (int x = 0; x < field_.width; ++x) {
-            initializeCell(x, y, map.data[y * field_.width + x]);
+            const size_t index = static_cast<size_t>(y) * field_.width + x;
+            double speed_value = 1.0;
+            if (speed_layer && index < speed_layer->size()) {
+                speed_value = (*speed_layer)[index];
+            }
+            initializeCell(x, y, map.data[index], speed_value);
         }
     }
 }
@@ -56,7 +73,7 @@ void FastMarching::allocateGridMemory() {
     }
 }
 
-void FastMarching::initializeCell(int x, int y, int8_t occupancy) {
+void FastMarching::initializeCell(int x, int y, int8_t occupancy, double speed_value) {
     GridCell& cell = field_.grid[y][x];
     FMMCell& fmm_cell = fmm_grid_[y][x];
     
@@ -67,7 +84,12 @@ void FastMarching::initializeCell(int x, int y, int8_t occupancy) {
     fmm_cell.y = y;
     
     // 障害物判定
-    cell.is_obstacle = (occupancy > OBSTACLE_THRESHOLD || occupancy == UNKNOWN_CELL);
+    const bool occupancy_obstacle = (occupancy > OBSTACLE_THRESHOLD || occupancy == UNKNOWN_CELL);
+    if (!std::isfinite(speed_value)) {
+        speed_value = 0.0;
+    }
+    cell.speed = std::max(0.0, speed_value);
+    cell.is_obstacle = occupancy_obstacle || (cell.speed <= 0.0);
     cell.distance = std::numeric_limits<double>::infinity();
     cell.is_visited = false;
     
@@ -200,7 +222,8 @@ std::array<double, 2> FastMarching::getVectorAt(const Position& pos) const {
 }
 
 double FastMarching::solveEikonalWithKnownNeighbors(double T_left, double T_right, 
-                                                    double T_up, double T_down) const {
+                                                    double T_up, double T_down,
+                                                    double travel_cost) const {
     // 水平・垂直方向の最小値を取得
     const double T_h = std::min(T_left, T_right);
     const double T_v = std::min(T_up, T_down);
@@ -212,22 +235,23 @@ double FastMarching::solveEikonalWithKnownNeighbors(double T_left, double T_righ
     
     // 片方向のみ有効な場合
     if (std::isinf(T_h)) {
-        return T_v + GRID_COST;
+        return T_v + travel_cost;
     }
     if (std::isinf(T_v)) {
-        return T_h + GRID_COST;
+        return T_h + travel_cost;
     }
     
     // 両方向が有効な場合：二次方程式を解く
-    return solveQuadraticEikonal(T_h, T_v);
+    return solveQuadraticEikonal(T_h, T_v, travel_cost);
 }
 
-double FastMarching::solveQuadraticEikonal(double T_h, double T_v) const {
+double FastMarching::solveQuadraticEikonal(double T_h, double T_v,
+                                           double travel_cost) const {
     const double a = T_h - T_v;
-    const double discriminant = 2 * GRID_COST * GRID_COST - a * a;
+    const double discriminant = 2 * travel_cost * travel_cost - a * a;
     
     if (discriminant < 0) {
-        return std::min(T_h, T_v) + GRID_COST;
+        return std::min(T_h, T_v) + travel_cost;
     }
     
     return (T_h + T_v + std::sqrt(discriminant)) / 2.0;
@@ -249,7 +273,8 @@ double FastMarching::solveEikonal(int x, int y) {
     if (y < field_.height-1 && fmm_grid_[y+1][x].status == FROZEN)
         T_down = fmm_grid_[y+1][x].time;
     
-    return solveEikonalWithKnownNeighbors(T_left, T_right, T_up, T_down);
+    const double travel_cost = getTravelCostForCell(x, y);
+    return solveEikonalWithKnownNeighbors(T_left, T_right, T_up, T_down, travel_cost);
 }
 
 void FastMarching::updateNeighbors(int x, int y) {
@@ -295,6 +320,14 @@ void FastMarching::resetFMMGrid() {
             cell.status = FAR;
         }
     }
+}
+
+double FastMarching::getTravelCostForCell(int x, int y) const {
+    const double speed = field_.grid[y][x].speed;
+    if (!std::isfinite(speed) || speed <= 0.0) {
+        return std::numeric_limits<double>::infinity();
+    }
+    return GRID_COST / speed;
 }
 
 }  // namespace tvvf_vo_c

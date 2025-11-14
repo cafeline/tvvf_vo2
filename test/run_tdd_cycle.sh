@@ -12,7 +12,7 @@ NC='\033[0m' # No Color
 
 # 作業ディレクトリ
 WORKSPACE="/home/rosuser/raspicat_ws"
-TEST_BINARY="$WORKSPACE/build/tvvf_vo_c/test/test_wavefront_expander"
+TEST_BINARY="$WORKSPACE/build/tvvf_vo_c/test/test_fast_marching"
 
 # Phase 1: Red Phase
 echo -e "${RED}=== Red Phase: Running tests (expecting failures) ===${NC}"

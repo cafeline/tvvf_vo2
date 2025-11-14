@@ -14,13 +14,16 @@ namespace tvvf_vo_c {
 // グリッドマップ上の単一セル
 struct GridCell {
     int x, y;                    // グリッド座標
-    double distance;             // ゴールまでの距離
+    double distance;             // ゴールまでの距離（または到達時間）
     double potential;            // ポテンシャル値
+    double speed;                // 速度場F(x)
+    double clearance;            // 障害物からの距離
     bool is_obstacle;            // 障害物フラグ
     bool is_visited;             // 訪問済みフラグ
     
     GridCell() : x(0), y(0), distance(std::numeric_limits<double>::infinity()), 
-                 potential(0.0), is_obstacle(false), is_visited(false) {}
+                 potential(0.0), speed(1.0), clearance(0.0),
+                 is_obstacle(false), is_visited(false) {}
 };
 
 // 部分領域情報

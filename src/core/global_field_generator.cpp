@@ -96,13 +96,20 @@ namespace {
 GlobalFieldGenerator::GlobalFieldGenerator() 
     : last_computation_time_(0.0),
       static_field_computed_(false),
-      enable_dynamic_repulsion_(true) {
-    wavefront_expander_ = std::make_unique<WavefrontExpander>();
+      enable_dynamic_repulsion_(true),
+      cost_map_settings_(),
+      cost_map_builder_(cost_map_settings_),
+      last_cost_map_result_(std::nullopt) {
     fast_marching_ = std::make_unique<FastMarching>();
 }
 
 void GlobalFieldGenerator::setDynamicRepulsionEnabled(bool enable) {
     enable_dynamic_repulsion_ = enable;
+}
+
+void GlobalFieldGenerator::setCostMapSettings(const CostMapSettings& settings) {
+    cost_map_settings_ = settings;
+    cost_map_builder_ = CostMapBuilder(cost_map_settings_);
 }
 
 // 静的場の事前計算
@@ -121,8 +128,16 @@ void GlobalFieldGenerator::precomputeStaticField(const nav_msgs::msg::OccupancyG
         }
     }
 
+    auto cost_map = cost_map_builder_.build(*map_ptr);
+    if (!cost_map.isValid()) {
+        static_field_computed_ = false;
+        return;
+    }
+
+    last_cost_map_result_ = cost_map;
+
     // Fast Marching Methodを使用して静的場を計算
-    fast_marching_->initializeFromOccupancyGrid(*map_ptr);
+    fast_marching_->initializeFromOccupancyGrid(*map_ptr, last_cost_map_result_->speed_layer);
     fast_marching_->computeDistanceField(goal);
     fast_marching_->generateVectorField();
     

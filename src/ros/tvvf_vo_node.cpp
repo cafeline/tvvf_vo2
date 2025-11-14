@@ -17,6 +17,7 @@ namespace tvvf_vo_c
     // グローバルフィールドジェネレータ初期化
     global_field_generator_ = std::make_unique<GlobalFieldGenerator>();
     global_field_generator_->setDynamicRepulsionEnabled(enable_global_repulsion_);
+    global_field_generator_->setCostMapSettings(cost_map_settings_);
 
     // 斥力計算器初期化
     repulsive_force_calculator_ = std::make_unique<RepulsiveForceCalculator>();
@@ -87,6 +88,13 @@ namespace tvvf_vo_c
     this->declare_parameter("map_repulsion_recompute_distance", 1.0);
     this->declare_parameter("map_repulsion_occupancy_threshold", 50);
     this->declare_parameter("publish_map_obstacle_markers", true);
+    this->declare_parameter("costmap_occupied_threshold", 50.0);
+    this->declare_parameter("costmap_free_threshold", 10.0);
+    this->declare_parameter("costmap_alpha", 1.0);
+    this->declare_parameter("costmap_min_speed", 0.05);
+    this->declare_parameter("costmap_max_speed", 1.0);
+    this->declare_parameter("costmap_clearance_epsilon", 0.1);
+    this->declare_parameter("costmap_max_clearance", 5.0);
 
   }
 
@@ -120,6 +128,21 @@ namespace tvvf_vo_c
     publish_map_obstacle_markers_ = this->get_parameter("publish_map_obstacle_markers").as_bool();
     vector_field_publish_interval_ = std::max(0.0, this->get_parameter("vector_field_publish_interval").as_double());
     RCLCPP_INFO(this->get_logger(), "Vector field publish interval set to %.3f [s]", vector_field_publish_interval_);
+
+    cost_map_settings_.occupied_threshold =
+        std::clamp(this->get_parameter("costmap_occupied_threshold").as_double(), 0.0, 100.0);
+    cost_map_settings_.free_threshold =
+        std::clamp(this->get_parameter("costmap_free_threshold").as_double(), 0.0, 100.0);
+    cost_map_settings_.free_threshold = std::min(cost_map_settings_.free_threshold, cost_map_settings_.occupied_threshold);
+    cost_map_settings_.alpha = std::max(0.0, this->get_parameter("costmap_alpha").as_double());
+    cost_map_settings_.min_speed = std::max(0.0, this->get_parameter("costmap_min_speed").as_double());
+    cost_map_settings_.max_speed = std::max(cost_map_settings_.min_speed,
+        this->get_parameter("costmap_max_speed").as_double());
+    cost_map_settings_.clearance_epsilon =
+        std::max(0.01, this->get_parameter("costmap_clearance_epsilon").as_double());
+    cost_map_settings_.max_clearance =
+        std::max(cost_map_settings_.clearance_epsilon,
+                 this->get_parameter("costmap_max_clearance").as_double());
 
     return config;
   }

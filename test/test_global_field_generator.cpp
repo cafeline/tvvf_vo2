@@ -6,6 +6,7 @@
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <chrono>
 #include <cmath>
+#include <algorithm>
 
 using namespace tvvf_vo_c;
 
@@ -52,6 +53,16 @@ TEST_F(GlobalFieldGeneratorTest, PrecomputeStaticField) {
     auto field = generator.generateField({});
     EXPECT_EQ(field.width, 20);
     EXPECT_EQ(field.height, 20);
+}
+
+TEST_F(GlobalFieldGeneratorTest, StoresCostMapResult) {
+    Position goal(8.0, 8.0);
+    generator.precomputeStaticField(test_map, goal);
+
+    const auto& cost_map = generator.getLastCostMap();
+    ASSERT_TRUE(cost_map.has_value());
+    EXPECT_EQ(cost_map->width, test_map.info.width);
+    EXPECT_EQ(cost_map->height, test_map.info.height);
 }
 
 TEST_F(GlobalFieldGeneratorTest, CropsStaticFieldToRegion) {
@@ -154,6 +165,41 @@ TEST_F(GlobalFieldGeneratorTest, RealtimePerformance) {
     double avg_time_ms = duration.count() / 100.0 / 1000.0;
     // Red Phase: 空の実装なので非常に高速に実行されるため、このテストはパスする可能性がある
     EXPECT_LT(avg_time_ms, 10.0);
+}
+
+TEST_F(GlobalFieldGeneratorTest, EndToEndGradientGuidanceAvoidsWall) {
+    test_map.data.assign(test_map.data.size(), 0);
+
+    Position goal(8.0, 1.0);
+    generator.precomputeStaticField(test_map, goal);
+
+    Position pose(1.0, 1.0);
+    std::vector<DynamicObstacle> empty;
+    bool reached = false;
+    const double max_x = test_map.info.width * test_map.info.resolution;
+    const double max_y = test_map.info.height * test_map.info.resolution;
+
+    const double step_size = 0.05;
+    for (int step = 0; step < 400; ++step) {
+        auto vec = generator.getVelocityAt(pose, empty);
+        const double norm = std::sqrt(vec[0] * vec[0] + vec[1] * vec[1]);
+        if (norm < 1e-4) {
+            break;
+        }
+
+        pose.x = std::clamp(pose.x + vec[0] * step_size, 0.0, max_x);
+        pose.y = std::clamp(pose.y + vec[1] * step_size, 0.0, max_y);
+
+        if (std::hypot(goal.x - pose.x, goal.y - pose.y) < 0.3) {
+            reached = true;
+            break;
+        }
+    }
+
+    EXPECT_TRUE(reached);
+    if (!reached) {
+        ADD_FAILURE() << "Final pose (" << pose.x << ", " << pose.y << ")";
+    }
 }
 
 // TEST 6: ブレンディングのテスト

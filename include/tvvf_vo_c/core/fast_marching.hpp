@@ -14,6 +14,7 @@ namespace tvvf_vo_c {
 class FastMarching {
 private:
     VectorField field_;
+    static constexpr double DEFAULT_TRAVEL_COST = 1.0;
     
     // FMM用の状態
     enum CellStatus {
@@ -50,6 +51,8 @@ public:
     
     // マップを初期化
     void initializeFromOccupancyGrid(const nav_msgs::msg::OccupancyGrid& map);
+    void initializeFromOccupancyGrid(const nav_msgs::msg::OccupancyGrid& map,
+                                     const std::vector<double>& speed_layer);
     
     // ゴールからの距離場を計算
     void computeDistanceField(const Position& goal);
@@ -65,12 +68,15 @@ public:
     
     // Eikonalソルバー（テスト用パブリック関数）
     double solveEikonalWithKnownNeighbors(double T_left, double T_right, 
-                                          double T_up, double T_down) const;
+                                          double T_up, double T_down,
+                                          double travel_cost = DEFAULT_TRAVEL_COST) const;
     
 private:
+    void initializeFromOccupancyGridImpl(const nav_msgs::msg::OccupancyGrid& map,
+                                         const std::vector<double>* speed_layer);
     // Eikonal方程式のソルバー
     double solveEikonal(int x, int y);
-    double solveQuadraticEikonal(double T_h, double T_v) const;
+    double solveQuadraticEikonal(double T_h, double T_v, double travel_cost) const;
     
     // ナローバンド管理
     void updateNeighbors(int x, int y);
@@ -80,7 +86,7 @@ private:
     // 初期化ヘルパー
     void initializeFieldMetadata(const nav_msgs::msg::OccupancyGrid& map);
     void allocateGridMemory();
-    void initializeCell(int x, int y, int8_t occupancy);
+    void initializeCell(int x, int y, int8_t occupancy, double speed_value);
     bool initializeGoal(const Position& goal);
     
     // FMM実行
@@ -95,6 +101,7 @@ private:
     // ユーティリティ
     bool isValidGridPosition(int x, int y) const;
     void resetFMMGrid();
+    double getTravelCostForCell(int x, int y) const;
 };
 
 }  // namespace tvvf_vo_c
