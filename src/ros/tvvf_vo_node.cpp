@@ -12,6 +12,7 @@ namespace tvvf_vo_c
 
     // 設定初期化
     config_ = create_config_from_parameters();
+    base_frame_ = this->get_parameter("base_frame").as_string();
     map_obstacles_dirty_ = true;
 
     // グローバルフィールドジェネレータ初期化
@@ -22,6 +23,7 @@ namespace tvvf_vo_c
     // 斥力計算器初期化
     repulsive_force_calculator_ = std::make_unique<RepulsiveForceCalculator>();
     repulsive_force_calculator_->setConfig(repulsive_config_);
+    velocity_optimizer_ = std::make_unique<SmoothVelocityOptimizer>(build_optimizer_options());
 
     // TF2関連初期化
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -30,9 +32,9 @@ namespace tvvf_vo_c
     // パブリッシャー初期化
     cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel_raw", 10);
     vector_field_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("tvvf_vo_vector_field", 10);
-    map_obstacles_marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("map_static_obstacles_markers", 10);
     planned_path_pub_ = this->create_publisher<nav_msgs::msg::Path>("planned_path", 10);
     goal_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("goal_marker", 10);
+    cmd_velocity_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("cmd_vel_marker", 10);
 
     // サブスクライバー初期化
     auto map_qos = rclcpp::QoS(1).reliable().transient_local();
@@ -87,7 +89,6 @@ namespace tvvf_vo_c
     this->declare_parameter("map_repulsion_sampling_step", 0.5);
     this->declare_parameter("map_repulsion_recompute_distance", 1.0);
     this->declare_parameter("map_repulsion_occupancy_threshold", 50);
-    this->declare_parameter("publish_map_obstacle_markers", true);
     this->declare_parameter("costmap_occupied_threshold", 50.0);
     this->declare_parameter("costmap_free_threshold", 10.0);
     this->declare_parameter("costmap_alpha", 1.0);
@@ -95,6 +96,12 @@ namespace tvvf_vo_c
     this->declare_parameter("costmap_max_speed", 1.0);
     this->declare_parameter("costmap_clearance_epsilon", 0.1);
     this->declare_parameter("costmap_max_clearance", 5.0);
+    this->declare_parameter("optimizer_goal_weight", 1.0);
+    this->declare_parameter("optimizer_smooth_weight", 4.0);
+    this->declare_parameter("optimizer_obstacle_weight", 2.0);
+    this->declare_parameter("optimizer_obstacle_influence_range", 1.5);
+    this->declare_parameter("optimizer_obstacle_safe_distance", 0.4);
+    this->declare_parameter("optimizer_max_linear_acceleration", 0.5);
 
   }
 
@@ -125,7 +132,6 @@ namespace tvvf_vo_c
         std::max(0.1, this->get_parameter("map_repulsion_recompute_distance").as_double());
     map_repulsion_recompute_distance_sq_ =
         map_repulsion_recompute_distance_ * map_repulsion_recompute_distance_;
-    publish_map_obstacle_markers_ = this->get_parameter("publish_map_obstacle_markers").as_bool();
     vector_field_publish_interval_ = std::max(0.0, this->get_parameter("vector_field_publish_interval").as_double());
     RCLCPP_INFO(this->get_logger(), "Vector field publish interval set to %.3f [s]", vector_field_publish_interval_);
 
@@ -143,6 +149,16 @@ namespace tvvf_vo_c
     cost_map_settings_.max_clearance =
         std::max(cost_map_settings_.clearance_epsilon,
                  this->get_parameter("costmap_max_clearance").as_double());
+
+    config.goal_weight = std::max(0.0, this->get_parameter("optimizer_goal_weight").as_double());
+    config.smooth_weight = std::max(0.0, this->get_parameter("optimizer_smooth_weight").as_double());
+    config.obstacle_weight = std::max(0.0, this->get_parameter("optimizer_obstacle_weight").as_double());
+    config.obstacle_influence_range =
+        std::max(0.1, this->get_parameter("optimizer_obstacle_influence_range").as_double());
+    config.obstacle_safe_distance =
+        std::max(0.05, this->get_parameter("optimizer_obstacle_safe_distance").as_double());
+    config.max_linear_acceleration =
+        std::max(0.01, this->get_parameter("optimizer_max_linear_acceleration").as_double());
 
     return config;
   }
@@ -206,6 +222,18 @@ namespace tvvf_vo_c
       return 0.0;
     }
     return this->get_parameter("vector_field_path_width").as_double();
+  }
+
+  OptimizationOptions TVVFVONode::build_optimizer_options() const
+  {
+    OptimizationOptions options;
+    options.goal_weight = config_.goal_weight;
+    options.smooth_weight = config_.smooth_weight;
+    options.obstacle_weight = config_.obstacle_weight;
+    options.obstacle_influence_range = config_.obstacle_influence_range;
+    options.obstacle_safe_distance = config_.obstacle_safe_distance;
+    options.max_linear_acceleration = config_.max_linear_acceleration;
+    return options;
   }
 
 } // namespace tvvf_vo_c

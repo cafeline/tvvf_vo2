@@ -73,6 +73,7 @@ namespace tvvf_vo_c
     cmd_msg.angular.z = std::clamp(cmd_msg.angular.z, -max_angular_vel, max_angular_vel);
 
     cmd_vel_pub_->publish(cmd_msg);
+    publish_command_marker(cmd_msg);
   }
 
   std::pair<double, double> TVVFVONode::convert_to_differential_drive(
@@ -110,6 +111,7 @@ namespace tvvf_vo_c
   {
     auto cmd_msg = geometry_msgs::msg::Twist();
     cmd_vel_pub_->publish(cmd_msg);
+    previous_velocity_command_.reset();
   }
 
   void TVVFVONode::publish_planned_path()
@@ -165,5 +167,52 @@ namespace tvvf_vo_c
 
   planned_path_pub_->publish(path_msg);
 }
+
+  void TVVFVONode::publish_command_marker(const geometry_msgs::msg::Twist& cmd_msg)
+  {
+    if (!cmd_velocity_marker_pub_) {
+      return;
+    }
+
+    visualization_msgs::msg::Marker marker;
+    marker.header.frame_id = base_frame_.empty()
+        ? this->get_parameter("base_frame").as_string()
+        : base_frame_;
+    marker.header.stamp = this->now();
+    marker.ns = "tvvf_cmd_velocity";
+    marker.id = cmd_velocity_marker_seq_++;
+    marker.type = visualization_msgs::msg::Marker::ARROW;
+    marker.action = visualization_msgs::msg::Marker::ADD;
+
+    geometry_msgs::msg::Point start, end;
+    start.x = 0.0;
+    start.y = 0.0;
+    start.z = 0.1;
+    end.x = std::clamp(cmd_msg.linear.x, -config_.max_linear_velocity, config_.max_linear_velocity);
+    end.y = std::clamp(cmd_msg.linear.y, -config_.max_linear_velocity, config_.max_linear_velocity);
+    end.z = 0.1;
+    marker.points.push_back(start);
+    marker.points.push_back(end);
+
+    marker.scale.x = 0.03;
+    marker.scale.y = 0.06;
+    marker.scale.z = 0.08;
+
+    const double magnitude = std::hypot(end.x, end.y);
+    const double normalized = std::min(1.0, magnitude / std::max(config_.max_linear_velocity, 1e-3));
+    if (end.x >= 0.0) {
+      marker.color.r = 0.1;
+      marker.color.g = 0.8 * normalized + 0.2;
+      marker.color.b = 0.2;
+    } else {
+      marker.color.r = 0.8 * normalized + 0.2;
+      marker.color.g = 0.2;
+      marker.color.b = 0.2;
+    }
+    marker.color.a = 0.9;
+    marker.lifetime = rclcpp::Duration::from_seconds(0.2);
+
+    cmd_velocity_marker_pub_->publish(marker);
+  }
 
 } // namespace tvvf_vo_c

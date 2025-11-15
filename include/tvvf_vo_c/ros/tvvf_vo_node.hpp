@@ -16,6 +16,7 @@
 #include "tvvf_vo_c/core/types.hpp"
 #include "tvvf_vo_c/core/global_field_generator.hpp"
 #include "tvvf_vo_c/core/repulsive_force.hpp"
+#include "tvvf_vo_c/core/smooth_velocity_optimizer.hpp"
 #include "tvvf_vo_c/core/map_repulsion.hpp"
 #include "tvvf_vo_c/core/region_utils.hpp"
 #include <memory>
@@ -50,13 +51,16 @@ private:
     // コア機能
     std::unique_ptr<GlobalFieldGenerator> global_field_generator_;
     std::unique_ptr<RepulsiveForceCalculator> repulsive_force_calculator_;
+    std::unique_ptr<SmoothVelocityOptimizer> velocity_optimizer_;
     TVVFVOConfig config_;
     RepulsiveForceConfig repulsive_config_;
     MapRepulsionSettings map_repulsion_settings_;
     CostMapSettings cost_map_settings_;
     bool enable_global_repulsion_{true};
     bool enable_map_repulsion_{false};
-    bool publish_map_obstacle_markers_{false};
+    std::optional<Velocity> previous_velocity_command_;
+    std::string base_frame_;
+    int cmd_velocity_marker_seq_{0};
 
     // 状態変数
     std::optional<RobotState> robot_state_;
@@ -65,7 +69,6 @@ private:
     std::optional<nav_msgs::msg::OccupancyGrid> current_map_;
     std::optional<visualization_msgs::msg::MarkerArray> static_obstacles_;
     std::optional<visualization_msgs::msg::MarkerArray> external_static_obstacles_;
-    std::optional<visualization_msgs::msg::MarkerArray> map_static_obstacles_;
     std::vector<Position> static_obstacle_positions_cache_;
     bool static_obstacle_cache_ready_{false};
     bool map_obstacles_dirty_{false};
@@ -84,9 +87,9 @@ private:
     // パブリッシャー
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr vector_field_pub_;
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr map_obstacles_marker_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr planned_path_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr goal_marker_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr cmd_velocity_marker_pub_;
 
     // サブスクライバー
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
@@ -144,7 +147,6 @@ private:
     void update_static_obstacle_cache(const visualization_msgs::msg::MarkerArray& msg);
     void update_combined_static_obstacles();
     void refresh_map_obstacle_cache(const Position& robot_pos);
-    void publish_map_obstacle_markers(const visualization_msgs::msg::MarkerArray& markers);
 
 
     /**
@@ -193,8 +195,6 @@ private:
     bool is_goal_reached() const;
     void handle_goal_reached();
     ControlOutput compute_control_output();
-    void apply_repulsive_force(std::array<double, 2>& velocity_vector);
-    void scale_velocity_vector(std::array<double, 2>& velocity_vector);
     void update_visualization();
     bool is_vector_field_publish_due(const rclcpp::Time& now) const;
     void publish_planned_path();
@@ -202,6 +202,8 @@ private:
     bool try_recompute_static_field();
     std::optional<FieldRegion> build_planning_region() const;
     double get_path_width_parameter() const;
+    OptimizationOptions build_optimizer_options() const;
+    void publish_command_marker(const geometry_msgs::msg::Twist& cmd_msg);
 
 private:
     // 可視化ヘルパー関数

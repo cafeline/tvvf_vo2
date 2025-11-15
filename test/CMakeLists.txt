@@ -20,6 +20,26 @@ ament_target_dependencies(test_fast_marching
     Eigen3
 )
 
+# Smooth Velocity Optimizerテスト
+ament_add_gtest(test_smooth_velocity_optimizer
+    test_smooth_velocity_optimizer.cpp
+)
+
+target_include_directories(test_smooth_velocity_optimizer PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_smooth_velocity_optimizer
+    ${PROJECT_NAME}_core
+)
+
+ament_target_dependencies(test_smooth_velocity_optimizer
+    rclcpp
+    nav_msgs
+    geometry_msgs
+    Eigen3
+)
+
 # Cost Map Builderテスト
 ament_add_gtest(test_cost_map_builder
     test_cost_map_builder.cpp

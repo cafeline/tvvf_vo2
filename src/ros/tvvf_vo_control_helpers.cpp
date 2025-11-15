@@ -1,4 +1,5 @@
 #include "tvvf_vo_c/ros/tvvf_vo_node.hpp"
+#include <cmath>
 
 namespace tvvf_vo_c
 {
@@ -45,40 +46,36 @@ namespace tvvf_vo_c
       return ControlOutput(Velocity(0.0, 0.0), 0.01, 0.01, 0.0);
     }
 
-    // 基本のベクトル場から速度を取得
-    auto velocity_vector = global_field_generator_->getVelocityAt(
+    auto field_vector = global_field_generator_->getVelocityAt(
         robot_state_->position, dynamic_obstacles_);
 
-    // 静的障害物からの斥力を追加
-    apply_repulsive_force(velocity_vector);
-
-    // 速度をスケーリング
-    scale_velocity_vector(velocity_vector);
-
-    // 制御出力を作成
-    return ControlOutput(
-        Velocity(velocity_vector[0], velocity_vector[1]),
-        0.01,  // computation_time
-        0.01,  // dt
-        1.0    // confidence
-    );
-  }
-
-  void TVVFVONode::apply_repulsive_force(std::array<double, 2>& velocity_vector)
-  {
-    if (static_obstacle_cache_ready_ && repulsive_force_calculator_) {
-      const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromPositions(
-          robot_state_->position, static_obstacle_positions_cache_);
-      velocity_vector[0] += repulsive_force.x;
-      velocity_vector[1] += repulsive_force.y;
+    const double vector_norm = std::hypot(field_vector[0], field_vector[1]);
+    Velocity desired_velocity(0.0, 0.0);
+    if (vector_norm > 1e-6) {
+      desired_velocity.vx = field_vector[0] * config_.max_linear_velocity;
+      desired_velocity.vy = field_vector[1] * config_.max_linear_velocity;
     }
-  }
 
-  void TVVFVONode::scale_velocity_vector(std::array<double, 2>& velocity_vector)
-  {
-    const double max_velocity = this->get_parameter("max_linear_velocity").as_double();
-    velocity_vector[0] *= max_velocity;
-    velocity_vector[1] *= max_velocity;
+    OptimizationState opt_state;
+    opt_state.desired_velocity = desired_velocity;
+    opt_state.previous_velocity = previous_velocity_command_.value_or(Velocity(0.0, 0.0));
+    opt_state.robot_position = robot_state_->position;
+    opt_state.dynamic_obstacles = dynamic_obstacles_;
+    opt_state.static_obstacles = static_obstacle_positions_cache_;
+    opt_state.max_speed = config_.max_linear_velocity;
+    opt_state.dt = 0.05;
+
+    Velocity optimized_velocity = desired_velocity;
+    if (velocity_optimizer_) {
+      optimized_velocity = velocity_optimizer_->computeOptimalVelocity(opt_state);
+    }
+    previous_velocity_command_ = optimized_velocity;
+
+    return ControlOutput(
+        optimized_velocity,
+        0.01,
+        0.05,
+        1.0);
   }
 
   void TVVFVONode::update_visualization()
