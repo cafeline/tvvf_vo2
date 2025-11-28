@@ -84,8 +84,8 @@ namespace tvvf_vo_c
 
     // 斥力を追加
     if (static_obstacle_cache_ready_ && repulsive_force_calculator_) {
-      const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromPositions(
-          world_pos, static_obstacle_positions_cache_);
+      const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromHulls(
+          world_pos, static_obstacle_hulls_cache_);
       combined[0] += repulsive_force.x;
       combined[1] += repulsive_force.y;
     }

@@ -100,6 +100,26 @@ ament_target_dependencies(test_repulsive_force
     Eigen3
 )
 
+# Unified obstacles test
+ament_add_gtest(test_obstacles_unified
+    test_obstacles_unified.cpp
+)
+
+target_include_directories(test_obstacles_unified PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_obstacles_unified
+    ${PROJECT_NAME}_core
+)
+
+ament_target_dependencies(test_obstacles_unified
+    rclcpp
+    nav_msgs
+    geometry_msgs
+    Eigen3
+)
+
 # Map Repulsionテスト
 ament_add_gtest(test_map_repulsion
     test_map_repulsion.cpp

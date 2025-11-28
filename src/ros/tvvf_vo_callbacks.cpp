@@ -65,30 +65,24 @@ namespace tvvf_vo_c
     }
   }
 
-  void TVVFVONode::static_obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg)
-  {
-    external_static_obstacles_ = *msg;
-    update_combined_static_obstacles();
-  }
-
   void TVVFVONode::update_static_obstacle_cache(const visualization_msgs::msg::MarkerArray& msg)
   {
     if (repulsive_force_calculator_ && !msg.markers.empty()) {
-      static_obstacle_positions_cache_ = repulsive_force_calculator_->extractObstaclePositions(msg);
-      static_obstacle_cache_ready_ = !static_obstacle_positions_cache_.empty();
+      static_obstacle_hulls_cache_ = repulsive_force_calculator_->extractObstacleHulls(msg);
+      static_obstacle_positions_cache_.clear();
+      for (const auto& hull : static_obstacle_hulls_cache_) {
+        static_obstacle_positions_cache_.push_back(hull.centroid);
+      }
+      static_obstacle_cache_ready_ = !static_obstacle_hulls_cache_.empty();
     } else {
       static_obstacle_positions_cache_.clear();
+      static_obstacle_hulls_cache_.clear();
       static_obstacle_cache_ready_ = false;
     }
   }
 
-  void TVVFVONode::obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg, bool is_dynamic)
+  void TVVFVONode::obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg)
   {
-    if (!is_dynamic) {
-      // 静的障害物はマップに含まれるため無視
-      return;
-    }
-
     dynamic_obstacles_.clear();
 
     for (const auto &marker : msg->markers)
@@ -102,6 +96,9 @@ namespace tvvf_vo_c
         dynamic_obstacles_.emplace_back(position, velocity, radius);
       }
     }
+
+    external_static_obstacles_ = *msg;
+    update_combined_static_obstacles();
   }
 
   void TVVFVONode::update_combined_static_obstacles()
@@ -109,6 +106,7 @@ namespace tvvf_vo_c
     if (!external_static_obstacles_.has_value()) {
       static_obstacles_.reset();
       static_obstacle_positions_cache_.clear();
+      static_obstacle_hulls_cache_.clear();
       static_obstacle_cache_ready_ = false;
       return;
     }

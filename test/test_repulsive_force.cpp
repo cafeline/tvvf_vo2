@@ -61,3 +61,64 @@ TEST(RepulsiveForceCalculatorCacheTest, ZeroForceWhenCacheIsEmpty)
     EXPECT_DOUBLE_EQ(force.x, 0.0);
     EXPECT_DOUBLE_EQ(force.y, 0.0);
 }
+
+visualization_msgs::msg::Marker make_square_hull_marker()
+{
+    // Convex hull as LINE_LIST (square with corners +/-0.5)
+    visualization_msgs::msg::Marker marker;
+    marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+    marker.action = visualization_msgs::msg::Marker::ADD;
+    marker.header.frame_id = "map";
+    marker.scale.x = 0.05;
+    marker.color.a = 1.0;
+
+    std::vector<std::pair<double, double>> corners = {
+        {-0.5, -0.5}, {0.5, -0.5}, {0.5, 0.5}, {-0.5, 0.5}
+    };
+    for (size_t i = 0; i < corners.size(); ++i) {
+        auto a = corners[i];
+        auto b = corners[(i + 1) % corners.size()];
+        geometry_msgs::msg::Point p1, p2;
+        p1.x = a.first; p1.y = a.second; p1.z = 0.0;
+        p2.x = b.first; p2.y = b.second; p2.z = 0.0;
+        marker.points.push_back(p1);
+        marker.points.push_back(p2);
+    }
+    return marker;
+}
+
+TEST(RepulsiveForceCalculatorHullTest, ExtractsConvexHullFromLineList)
+{
+    RepulsiveForceCalculator calculator;
+    visualization_msgs::msg::MarkerArray markers;
+    markers.markers.push_back(make_square_hull_marker());
+
+    auto hulls = calculator.extractObstacleHulls(markers);
+    ASSERT_EQ(hulls.size(), 1u);
+    EXPECT_EQ(hulls[0].vertices.size(), 4u);
+    EXPECT_NEAR(hulls[0].centroid.x, 0.0, 1e-9);
+    EXPECT_NEAR(hulls[0].centroid.y, 0.0, 1e-9);
+}
+
+TEST(RepulsiveForceCalculatorHullTest, ForceUsesNearestPointOnHull)
+{
+    RepulsiveForceCalculator calculator;
+    RepulsiveForceConfig config;
+    config.repulsive_strength = 2.0;
+    config.influence_range = 5.0;
+    calculator.setConfig(config);
+
+    visualization_msgs::msg::MarkerArray markers;
+    markers.markers.push_back(make_square_hull_marker());
+
+    auto hulls = calculator.extractObstacleHulls(markers);
+    ASSERT_EQ(hulls.size(), 1u);
+
+    // Robot is to the +x side; nearest hull point is (0.5, 0)
+    const Position robot_pos(2.0, 0.0);
+    const auto force = calculator.calculateTotalForceFromHulls(robot_pos, hulls);
+
+    // Distance to hull surface = 1.5 -> linear decay: (5 - 1.5) / 5 * 2 = 1.4
+    EXPECT_NEAR(force.x, 1.4, 1e-3);
+    EXPECT_NEAR(force.y, 0.0, 1e-6);
+}

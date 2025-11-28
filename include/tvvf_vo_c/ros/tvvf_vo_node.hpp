@@ -70,6 +70,7 @@ private:
     std::optional<visualization_msgs::msg::MarkerArray> static_obstacles_;
     std::optional<visualization_msgs::msg::MarkerArray> external_static_obstacles_;
     std::vector<Position> static_obstacle_positions_cache_;
+    std::vector<ObstacleHull> static_obstacle_hulls_cache_;
     bool static_obstacle_cache_ready_{false};
     bool map_obstacles_dirty_{false};
     std::optional<Position> last_map_repulsion_center_;
@@ -95,12 +96,13 @@ private:
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr clicked_point_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_sub_;
-    rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr dynamic_obstacles_sub_;
-    rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr static_obstacles_sub_;
+    rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr obstacles_sub_;
 
     // タイマー
     rclcpp::TimerBase::SharedPtr control_timer_;
 
+
+public:
 
     /**
      * @brief パラメータ設定
@@ -131,6 +133,13 @@ private:
      */
     void goal_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
+    // テスト用ユーティリティ
+    void debug_handle_obstacles(const visualization_msgs::msg::MarkerArray::SharedPtr msg) { obstacles_callback(msg); }
+    size_t debug_dynamic_obstacle_count() const { return dynamic_obstacles_.size(); }
+    bool debug_static_obstacle_cache_ready() const { return static_obstacle_cache_ready_; }
+    size_t debug_static_hull_count() const { return static_obstacle_hulls_cache_.size(); }
+    ObstacleHull debug_static_hull_at(size_t idx) const { return static_obstacle_hulls_cache_.at(idx); }
+
     /**
      * @brief 地図データコールバック
      * @param msg OccupancyGridメッセージ
@@ -140,10 +149,8 @@ private:
     /**
      * @brief 障害物データコールバック（動的・静的共通）
      * @param msg MarkerArrayメッセージ
-     * @param is_dynamic 動的障害物かどうか
      */
-    void obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg, bool is_dynamic);
-    void static_obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg);
+    void obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg);
     void update_static_obstacle_cache(const visualization_msgs::msg::MarkerArray& msg);
     void update_combined_static_obstacles();
     void refresh_map_obstacle_cache(const Position& robot_pos);
@@ -206,6 +213,8 @@ private:
     void publish_command_marker(const geometry_msgs::msg::Twist& cmd_msg);
 
 private:
+    friend class ObstaclesUnifiedTest;
+
     // 可視化ヘルパー関数
     std::array<double, 2> calculate_combined_vector(
         const std::array<double, 2>& original_vector,

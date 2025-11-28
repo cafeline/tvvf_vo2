@@ -26,6 +26,14 @@ struct RepulsiveForceConfig {
 };
 
 /**
+ * @brief 凸包障害物（LINE_LIST）用の表現
+ */
+struct ObstacleHull {
+    std::vector<Position> vertices;
+    Position centroid;
+};
+
+/**
  * @brief 斥力計算クラス
  * 
  * 静的障害物からの斥力を計算し、ロボットの回避行動を生成する
@@ -76,6 +84,24 @@ public:
     Vector2D calculateTotalForceFromPositions(
         const Position& robot_pos,
         const std::vector<Position>& obstacles) const;
+
+    /**
+     * @brief 事前に抽出済みの凸包障害物から総斥力を計算
+     * @param robot_pos ロボットの現在位置
+     * @param obstacles 凸包障害物配列
+     * @return 総斥力ベクトル
+     */
+    Vector2D calculateTotalForceFromHulls(
+        const Position& robot_pos,
+        const std::vector<ObstacleHull>& obstacles) const;
+
+    /**
+     * @brief MarkerArrayから凸包障害物を抽出
+     * @param marker_array 障害物マーカー配列（LINE_LIST想定）
+     * @return 凸包障害物のリスト
+     */
+    std::vector<ObstacleHull> extractObstacleHulls(
+        const visualization_msgs::msg::MarkerArray& marker_array) const;
     
     /**
      * @brief 最大斥力を取得
@@ -92,6 +118,20 @@ private:
      * @return 斥力の大きさ（スカラー値）
      */
     double calculateForceMagnitude(double distance) const;
+
+    /**
+     * @brief 凸包との最近傍点ベースで斥力を計算
+     */
+    Vector2D calculateForceToHull(
+        const Position& robot_pos,
+        const ObstacleHull& hull) const;
+
+    /**
+     * @brief 点が凸包内部にあるか
+     */
+    bool isInsideConvexPolygon(
+        const Position& p,
+        const std::vector<Position>& vertices) const;
 };
 
 } // namespace tvvf_vo_c

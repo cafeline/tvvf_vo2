@@ -47,15 +47,10 @@ namespace tvvf_vo_c
     goal_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
         "goal_pose", 10, std::bind(&TVVFVONode::goal_pose_callback, this, std::placeholders::_1));
 
-    // 障害物データをsubscribe（統合コールバック使用）
-    dynamic_obstacles_sub_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(
-        "dynamic_obstacles", 10,
-        [this](const visualization_msgs::msg::MarkerArray::SharedPtr msg) { obstacles_callback(msg, true); });
-
-    // 静的障害物データをsubscribe
-    static_obstacles_sub_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(
-        "static_obstacles", 10,
-        std::bind(&TVVFVONode::static_obstacles_callback, this, std::placeholders::_1));
+  // 障害物データをsubscribe（統合コールバック使用）
+  obstacles_sub_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(
+      "obstacles", 10,
+      std::bind(&TVVFVONode::obstacles_callback, this, std::placeholders::_1));
 
     // タイマー初期化（制御ループ：20Hz）
     control_timer_ = this->create_wall_timer(
