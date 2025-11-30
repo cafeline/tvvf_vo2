@@ -21,6 +21,7 @@ public:
 
     void setDynamicRepulsionEnabled(bool enable);
     bool isDynamicRepulsionEnabled() const { return enable_dynamic_repulsion_; }
+    void setDynamicRepulsionParameters(double gain, double influence_range);
     void setCostMapSettings(const CostMapSettings& settings);
     const std::optional<CostMapResult>& getLastCostMap() const { return last_cost_map_result_; }
     
@@ -52,6 +53,9 @@ private:
     double last_computation_time_;
     bool static_field_computed_;
     bool enable_dynamic_repulsion_;
+    double dynamic_repulsive_gain_;
+    double dynamic_influence_radius_;
+    double dynamic_influence_radius_sq_;
     CostMapSettings cost_map_settings_;
     CostMapBuilder cost_map_builder_;
     std::optional<CostMapResult> last_cost_map_result_;

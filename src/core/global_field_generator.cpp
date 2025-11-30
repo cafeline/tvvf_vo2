@@ -11,8 +11,8 @@ namespace tvvf_vo_c {
 // 定数定義
 namespace {
     // 斥力計算パラメータ
-    constexpr double REPULSIVE_GAIN = 1.0;            // 斥力ゲイン
-    constexpr double INFLUENCE_RADIUS = 3.0;          // 影響半径[m]
+    constexpr double DEFAULT_REPULSIVE_GAIN = 1.0;    // 斥力ゲイン初期値
+    constexpr double DEFAULT_INFLUENCE_RADIUS = 3.0;  // 影響半径[m]初期値
     constexpr double MIN_DISTANCE = 0.1;              // 最小距離[m]（ゼロ除算防止）
     
     // ブレンディングパラメータ
@@ -20,7 +20,6 @@ namespace {
     constexpr double MIN_MAGNITUDE_THRESHOLD = 0.01;  // ベクトル大きさの最小閾値
     
     // パフォーマンス最適化
-    constexpr double INFLUENCE_RADIUS_SQ = INFLUENCE_RADIUS * INFLUENCE_RADIUS;
     constexpr double MIN_DISTANCE_SQ = MIN_DISTANCE * MIN_DISTANCE;
 
     struct CroppedMapResult {
@@ -97,6 +96,9 @@ GlobalFieldGenerator::GlobalFieldGenerator()
     : last_computation_time_(0.0),
       static_field_computed_(false),
       enable_dynamic_repulsion_(true),
+      dynamic_repulsive_gain_(DEFAULT_REPULSIVE_GAIN),
+      dynamic_influence_radius_(DEFAULT_INFLUENCE_RADIUS),
+      dynamic_influence_radius_sq_(DEFAULT_INFLUENCE_RADIUS * DEFAULT_INFLUENCE_RADIUS),
       cost_map_settings_(),
       cost_map_builder_(cost_map_settings_),
       last_cost_map_result_(std::nullopt) {
@@ -105,6 +107,13 @@ GlobalFieldGenerator::GlobalFieldGenerator()
 
 void GlobalFieldGenerator::setDynamicRepulsionEnabled(bool enable) {
     enable_dynamic_repulsion_ = enable;
+}
+
+void GlobalFieldGenerator::setDynamicRepulsionParameters(double gain, double influence_range)
+{
+    dynamic_repulsive_gain_ = std::max(0.0, gain);
+    dynamic_influence_radius_ = std::max(0.01, influence_range);
+    dynamic_influence_radius_sq_ = dynamic_influence_radius_ * dynamic_influence_radius_;
 }
 
 void GlobalFieldGenerator::setCostMapSettings(const CostMapSettings& settings) {
@@ -244,14 +253,15 @@ std::array<double, 2> GlobalFieldGenerator::computeRepulsiveForceFromObstacle(
     double distance_sq = dx * dx + dy * dy;
     
     // 影響範囲外の早期リターン（平方根計算を避ける）
-    if (distance_sq > INFLUENCE_RADIUS_SQ || distance_sq < MIN_DISTANCE_SQ) {
+    if (distance_sq > dynamic_influence_radius_sq_ || distance_sq < MIN_DISTANCE_SQ) {
         return {0.0, 0.0};
     }
     
     double distance = std::sqrt(distance_sq);
     
     // 斥力の大きさ（Coulomb型ポテンシャル）
-    double force_magnitude = REPULSIVE_GAIN * (1.0 / distance - 1.0 / INFLUENCE_RADIUS);
+    double force_magnitude = dynamic_repulsive_gain_ *
+      (1.0 / distance - 1.0 / dynamic_influence_radius_);
     
     // 正規化された方向ベクトル × 力の大きさ
     return {

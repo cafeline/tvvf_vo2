@@ -9,6 +9,7 @@
 #include <nav_msgs/msg/path.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <visualization_msgs/msg/marker.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -100,6 +101,7 @@ private:
 
     // タイマー
     rclcpp::TimerBase::SharedPtr control_timer_;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
 
 
 public:
@@ -211,6 +213,8 @@ private:
     double get_path_width_parameter() const;
     OptimizationOptions build_optimizer_options() const;
     void publish_command_marker(const geometry_msgs::msg::Twist& cmd_msg);
+    rcl_interfaces::msg::SetParametersResult on_parameter_update(
+      const std::vector<rclcpp::Parameter> & params);
 
 private:
     friend class ObstaclesUnifiedTest;

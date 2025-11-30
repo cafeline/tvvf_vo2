@@ -18,6 +18,8 @@ namespace tvvf_vo_c
     // グローバルフィールドジェネレータ初期化
     global_field_generator_ = std::make_unique<GlobalFieldGenerator>();
     global_field_generator_->setDynamicRepulsionEnabled(enable_global_repulsion_);
+    global_field_generator_->setDynamicRepulsionParameters(
+      repulsive_config_.repulsive_strength, repulsive_config_.influence_range);
     global_field_generator_->setCostMapSettings(cost_map_settings_);
 
     // 斥力計算器初期化
@@ -30,7 +32,7 @@ namespace tvvf_vo_c
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     // パブリッシャー初期化
-    cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel_raw", 10);
+    cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
     vector_field_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("tvvf_vo_vector_field", 10);
     planned_path_pub_ = this->create_publisher<nav_msgs::msg::Path>("planned_path", 10);
     goal_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("goal_marker", 10);
@@ -56,6 +58,9 @@ namespace tvvf_vo_c
     control_timer_ = this->create_wall_timer(
         std::chrono::milliseconds(50), std::bind(&TVVFVONode::control_loop, this));
 
+    // パラメータ変更コールバック（斥力設定を動的反映）
+    param_cb_handle_ = this->add_on_set_parameters_callback(
+      std::bind(&TVVFVONode::on_parameter_update, this, std::placeholders::_1));
   }
 
   void TVVFVONode::setup_parameters()
@@ -229,6 +234,56 @@ namespace tvvf_vo_c
     options.obstacle_safe_distance = config_.obstacle_safe_distance;
     options.max_linear_acceleration = config_.max_linear_acceleration;
     return options;
+  }
+
+  rcl_interfaces::msg::SetParametersResult TVVFVONode::on_parameter_update(
+    const std::vector<rclcpp::Parameter> & params)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
+    bool updated = false;
+
+    for (const auto & param : params) {
+      if (param.get_name() == "repulsive_strength") {
+        const double value = std::max(0.0, param.as_double());
+        repulsive_config_.repulsive_strength = value;
+        updated = true;
+      } else if (param.get_name() == "repulsive_influence_range") {
+        const double value = std::max(0.01, param.as_double());
+        repulsive_config_.influence_range = value;
+        updated = true;
+      } else if (param.get_name() == "optimizer_obstacle_weight") {
+        const double value = std::max(0.0, param.as_double());
+        config_.obstacle_weight = value;
+        updated = true;
+      } else if (param.get_name() == "optimizer_obstacle_influence_range") {
+        const double value = std::max(0.01, param.as_double());
+        config_.obstacle_influence_range = value;
+        updated = true;
+      }
+    }
+
+    if (updated && repulsive_force_calculator_) {
+      repulsive_force_calculator_->setConfig(repulsive_config_);
+      field_update_pending_ = true;  // 次回可視化/制御で最新値を反映
+      RCLCPP_INFO(
+        this->get_logger(),
+        "Updated params: repulsion(%.3f, %.3f) optimizer_obstacle(weight=%.3f, range=%.3f)",
+        repulsive_config_.repulsive_strength, repulsive_config_.influence_range,
+        config_.obstacle_weight, config_.obstacle_influence_range);
+    }
+
+    if (updated && velocity_optimizer_) {
+      velocity_optimizer_->setOptions(build_optimizer_options());
+    }
+
+    if (updated && global_field_generator_) {
+      global_field_generator_->setDynamicRepulsionParameters(
+        repulsive_config_.repulsive_strength, repulsive_config_.influence_range);
+      global_field_generator_->setDynamicRepulsionEnabled(enable_global_repulsion_);
+    }
+
+    return result;
   }
 
 } // namespace tvvf_vo_c
