@@ -140,15 +140,10 @@ namespace {
 GlobalFieldGenerator::GlobalFieldGenerator() 
     : last_computation_time_(0.0),
       static_field_computed_(false),
-      enable_dynamic_repulsion_(true),
       cost_map_settings_(),
       cost_map_builder_(cost_map_settings_),
       last_cost_map_result_(std::nullopt) {
     fast_marching_ = std::make_unique<FastMarching>();
-}
-
-void GlobalFieldGenerator::setDynamicRepulsionEnabled(bool enable) {
-    enable_dynamic_repulsion_ = enable;
 }
 
 void GlobalFieldGenerator::setCostMapSettings(const CostMapSettings& settings) {
@@ -259,12 +254,6 @@ VectorField GlobalFieldGenerator::generateField(const std::vector<DynamicObstacl
         last_computation_time_ = std::chrono::duration<double>(end - start).count();
         return static_field_;
     }
-
-    if (!enable_dynamic_repulsion_) {
-        auto end = std::chrono::high_resolution_clock::now();
-        last_computation_time_ = std::chrono::duration<double>(end - start).count();
-        return static_field_;
-    }
     
     // 動的障害物の影響をブレンド
     VectorField result = blendWithDynamicObstacles(static_field_, obstacles);
@@ -278,10 +267,6 @@ VectorField GlobalFieldGenerator::generateField(const std::vector<DynamicObstacl
 // 動的障害物の影響をブレンド
 VectorField GlobalFieldGenerator::blendWithDynamicObstacles(const VectorField& static_field,
                                                             const std::vector<DynamicObstacle>& obstacles) {
-    if (!enable_dynamic_repulsion_) {
-        return static_field;
-    }
-
     // フィールドをコピー
     VectorField blended_field = static_field;
     
@@ -420,9 +405,6 @@ std::array<double, 2> GlobalFieldGenerator::getVelocityAt(const Position& positi
     
     // 動的障害物からの斥力
     if (!obstacles.empty()) {
-        if (!enable_dynamic_repulsion_) {
-            return static_vector;
-        }
         auto repulsive_force = computeTotalRepulsiveForce(position, obstacles);
         
         // 斥力が有意な場合のみブレンド

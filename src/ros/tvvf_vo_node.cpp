@@ -5,7 +5,7 @@
 namespace tvvf_vo_c
 {
 
-  TVVFVONode::TVVFVONode() : Node("tvvf_vo_c_node"), field_update_pending_(false)
+  TVVFVONode::TVVFVONode() : Node("tvvf_vo_c_node")
   {
     // パラメータ設定
     setup_parameters();
@@ -13,16 +13,11 @@ namespace tvvf_vo_c
     // 設定初期化
     config_ = create_config_from_parameters();
     base_frame_ = this->get_parameter("base_frame").as_string();
-    map_obstacles_dirty_ = true;
 
-    // グローバルフィールドジェネレータ初期化
+    // グローバルフィールドジェネレータ初期化（動的障害物は常に考慮）
     global_field_generator_ = std::make_unique<GlobalFieldGenerator>();
-    global_field_generator_->setDynamicRepulsionEnabled(enable_global_repulsion_);
     global_field_generator_->setCostMapSettings(cost_map_settings_);
 
-    // 斥力計算器初期化
-    repulsive_force_calculator_ = std::make_unique<RepulsiveForceCalculator>();
-    repulsive_force_calculator_->setConfig(repulsive_config_);
     velocity_optimizer_ = std::make_unique<SmoothVelocityOptimizer>(build_optimizer_options());
 
     // TF2関連初期化
@@ -75,13 +70,8 @@ namespace tvvf_vo_c
     // 制御関連
     this->declare_parameter("goal_tolerance", 0.1);
     this->declare_parameter("vector_field_path_width", 4.0);
-    this->declare_parameter("vector_field_publish_interval", 0.2);
 
     // 斥力パラメータ
-    this->declare_parameter("repulsive_strength", 1.0);
-    this->declare_parameter("repulsive_influence_range", 2.0);
-    this->declare_parameter("enable_global_repulsion", true);
-    this->declare_parameter("enable_repulsive_field", false);
     this->declare_parameter("costmap_occupied_threshold", 50.0);
     this->declare_parameter("costmap_free_threshold", 10.0);
     this->declare_parameter("costmap_alpha", 1.0);
@@ -104,15 +94,6 @@ namespace tvvf_vo_c
 
     config.max_linear_velocity = this->get_parameter("max_linear_velocity").as_double();
     config.max_angular_velocity = this->get_parameter("max_angular_velocity").as_double();
-
-    // 斥力設定の読み込み
-    repulsive_config_.repulsive_strength = this->get_parameter("repulsive_strength").as_double();
-    repulsive_config_.influence_range = this->get_parameter("repulsive_influence_range").as_double();
-    enable_global_repulsion_ = this->get_parameter("enable_global_repulsion").as_bool();
-    enable_repulsive_field_ = this->get_parameter("enable_repulsive_field").as_bool();
-
-    vector_field_publish_interval_ = std::max(0.0, this->get_parameter("vector_field_publish_interval").as_double());
-    RCLCPP_INFO(this->get_logger(), "Vector field publish interval set to %.3f [s]", vector_field_publish_interval_);
 
     cost_map_settings_.occupied_threshold =
         std::clamp(this->get_parameter("costmap_occupied_threshold").as_double(), 0.0, 100.0);
@@ -140,44 +121,6 @@ namespace tvvf_vo_c
         std::max(0.01, this->get_parameter("optimizer_max_linear_acceleration").as_double());
 
     return config;
-  }
-
-  void TVVFVONode::request_static_field_update()
-  {
-    field_update_pending_ = true;
-  }
-
-  bool TVVFVONode::try_recompute_static_field()
-  {
-    if (!field_update_pending_) {
-      return true;
-    }
-
-    if (!goal_.has_value()) {
-      field_update_pending_ = false;
-      return true;
-    }
-
-    if (!current_map_.has_value() || !global_field_generator_) {
-      return false;
-    }
-
-    if (!robot_state_.has_value()) {
-      // ロボット姿勢が取得できなくても全域で計算する
-      update_robot_state();
-    }
-
-    auto region = robot_state_.has_value() ? build_planning_region() : std::optional<FieldRegion>{std::nullopt};
-
-    try {
-      global_field_generator_->precomputeStaticField(
-          current_map_.value(), goal_->position, region);
-      field_update_pending_ = false;
-      return true;
-    } catch (const std::exception& e) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to compute static field: %s", e.what());
-      return false;
-    }
   }
 
   std::optional<FieldRegion> TVVFVONode::build_planning_region() const
@@ -209,8 +152,6 @@ namespace tvvf_vo_c
     options.smooth_weight = config_.smooth_weight;
     options.obstacle_weight = config_.obstacle_weight;
     options.obstacle_influence_range = config_.obstacle_influence_range;
-    options.repulsive_strength = repulsive_config_.repulsive_strength;
-    options.repulsive_influence_range = repulsive_config_.influence_range;
     options.obstacle_safe_distance = config_.obstacle_safe_distance;
     options.max_linear_acceleration = config_.max_linear_acceleration;
     return options;

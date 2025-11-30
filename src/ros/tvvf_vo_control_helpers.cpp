@@ -32,7 +32,6 @@ namespace tvvf_vo_c
   {
     publish_stop_command();
     goal_.reset();
-    field_update_pending_ = false;
     publish_empty_visualization();
     RCLCPP_INFO(this->get_logger(), "Goal reached");
   }
@@ -91,33 +90,13 @@ namespace tvvf_vo_c
 
   void TVVFVONode::update_visualization()
   {
-    const auto now = this->get_clock()->now();
-    if (!is_vector_field_publish_due(now)) {
-      return;
-    }
-
     if (!latest_field_.has_value()) {
       return;
     }
 
     if (latest_field_->width > 0 && latest_field_->height > 0) {
       publish_combined_field_visualization(*latest_field_);
-      last_vector_field_publish_time_ = now;
     }
-  }
-
-  bool TVVFVONode::is_vector_field_publish_due(const rclcpp::Time& now) const
-  {
-    if (vector_field_publish_interval_ <= 0.0) {
-      return true;
-    }
-
-    if (last_vector_field_publish_time_.nanoseconds() == 0) {
-      return true;
-    }
-
-    const double elapsed = (now - last_vector_field_publish_time_).seconds();
-    return elapsed >= vector_field_publish_interval_;
   }
 
 } // namespace tvvf_vo_c

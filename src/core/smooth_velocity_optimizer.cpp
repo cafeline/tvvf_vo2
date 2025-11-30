@@ -116,11 +116,8 @@ Velocity SmoothVelocityOptimizer::clampVelocity(
 
 Velocity SmoothVelocityOptimizer::computeOptimalVelocity(
     const OptimizationState& state) const {
-  auto samples = buildObstacleSamples(state);
-  Velocity avoidance = computeAvoidanceVector(state.robot_position, samples);
   std::array<double, 2> desired = toArray(state.desired_velocity);
   std::array<double, 2> previous = toArray(state.previous_velocity);
-  std::array<double, 2> avoidance_array = {avoidance.vx, avoidance.vy};
 
   double weights_sum = 0.0;
   std::array<double, 2> numerator = {0.0, 0.0};
@@ -137,12 +134,6 @@ Velocity SmoothVelocityOptimizer::computeOptimalVelocity(
     numerator[1] += options_.smooth_weight * previous[1];
   }
 
-  double avoidance_norm = magnitude(avoidance_array);
-  if (options_.obstacle_weight > 0.0 && avoidance_norm > EPSILON) {
-    weights_sum += options_.obstacle_weight;
-    numerator[0] += options_.obstacle_weight * avoidance_array[0];
-    numerator[1] += options_.obstacle_weight * avoidance_array[1];
-  }
 
   Velocity blended;
   if (weights_sum <= EPSILON) {

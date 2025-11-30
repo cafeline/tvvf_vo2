@@ -12,10 +12,6 @@ namespace tvvf_vo_c
     {
       const bool robot_ok = update_robot_state();
 
-      if (field_update_pending_) {
-        field_update_pending_ = false;  // 毎フレーム生成に移行したため事前計算は行わない
-      }
-
       if (!robot_ok) {
         // ロボット姿勢が取れなくても可視化は進める
         update_visualization();
@@ -152,7 +148,7 @@ void TVVFVONode::publish_planned_path()
       break;
     }
 
-    auto field_vector = latest_field_->getVector(current_pos);
+    auto field_vector = compute_navigation_vector(latest_field_->getVector(current_pos), current_pos);
     double norm = std::sqrt(field_vector[0] * field_vector[0] + field_vector[1] * field_vector[1]);
 
     if (norm > 0.001) {

@@ -19,8 +19,6 @@ public:
     GlobalFieldGenerator();
     ~GlobalFieldGenerator() = default;
 
-    void setDynamicRepulsionEnabled(bool enable);
-    bool isDynamicRepulsionEnabled() const { return enable_dynamic_repulsion_; }
     void setCostMapSettings(const CostMapSettings& settings);
     const std::optional<CostMapResult>& getLastCostMap() const { return last_cost_map_result_; }
     
@@ -57,7 +55,6 @@ private:
     VectorField static_field_;
     double last_computation_time_;
     bool static_field_computed_;
-    bool enable_dynamic_repulsion_;
     CostMapSettings cost_map_settings_;
     CostMapBuilder cost_map_builder_;
     std::optional<CostMapResult> last_cost_map_result_;

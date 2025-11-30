@@ -74,26 +74,8 @@ namespace tvvf_vo_c
       const std::array<double, 2>& base_vector,
       const Position& world_pos) const
   {
-    // 元のベクトル場の値
-    std::array<double, 2> combined = base_vector;
-
-    // 斥力を追加（必要な場合のみ）
-    if (enable_repulsive_field_ && repulsive_force_calculator_) {
-      if (!static_obstacle_hulls_cache_.empty()) {
-        const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromHulls(
-            world_pos, static_obstacle_hulls_cache_);
-        combined[0] += repulsive_force.x;
-        combined[1] += repulsive_force.y;
-      }
-      if (!static_obstacle_positions_cache_.empty()) {
-        const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromPositions(
-            world_pos, static_obstacle_positions_cache_);
-        combined[0] += repulsive_force.x;
-        combined[1] += repulsive_force.y;
-      }
-    }
-
-    return combined;
+    (void)world_pos;
+    return base_vector;
   }
 
   // ヘルパー関数: ベクトルを可視化すべきか判定

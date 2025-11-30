@@ -8,10 +8,6 @@ namespace tvvf_vo_c
   {
     Position goal_position(msg->point.x, msg->point.y);
     goal_ = Goal(goal_position, this->get_parameter("goal_tolerance").as_double());
-    map_obstacles_dirty_ = true;
-
-    request_static_field_update();
-    try_recompute_static_field();
 
     RCLCPP_INFO(this->get_logger(), "Goal set from clicked_point: (%.2f, %.2f)",
                 goal_position.x, goal_position.y);
@@ -21,10 +17,6 @@ namespace tvvf_vo_c
   {
     Position goal_position(msg->pose.position.x, msg->pose.position.y);
     goal_ = Goal(goal_position, this->get_parameter("goal_tolerance").as_double());
-    map_obstacles_dirty_ = true;
-
-    request_static_field_update();
-    try_recompute_static_field();
 
     RCLCPP_INFO(this->get_logger(), "Goal set from goal_pose: (%.2f, %.2f)",
                 goal_position.x, goal_position.y);
@@ -56,37 +48,6 @@ namespace tvvf_vo_c
 
     // マップを保存
     current_map_ = *msg;
-    map_obstacles_dirty_ = true;
-
-    // GlobalFieldGeneratorで静的場を再計算（ゴールが設定されている場合）
-    if (goal_.has_value() && global_field_generator_) {
-      request_static_field_update();
-      try_recompute_static_field();
-    }
-  }
-
-  void TVVFVONode::update_static_obstacle_cache(const visualization_msgs::msg::MarkerArray& msg)
-  {
-    static_obstacle_positions_cache_.clear();
-    static_obstacle_hulls_cache_.clear();
-    static_obstacle_cache_ready_ = false;
-
-    if (!repulsive_force_calculator_ || msg.markers.empty()) {
-      return;
-    }
-
-    static_obstacle_hulls_cache_ = repulsive_force_calculator_->extractObstacleHulls(msg);
-    for (const auto& hull : static_obstacle_hulls_cache_) {
-      static_obstacle_positions_cache_.push_back(hull.centroid);
-    }
-
-    if (static_obstacle_hulls_cache_.empty()) {
-      for (const auto& marker : msg.markers) {
-        static_obstacle_positions_cache_.emplace_back(marker.pose.position.x, marker.pose.position.y);
-      }
-    }
-
-    static_obstacle_cache_ready_ = !static_obstacle_positions_cache_.empty() || !static_obstacle_hulls_cache_.empty();
   }
 
   void TVVFVONode::obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg)
@@ -106,27 +67,11 @@ namespace tvvf_vo_c
     }
 
     external_static_obstacles_ = *msg;
-    update_combined_static_obstacles();
-  }
-
-  void TVVFVONode::update_combined_static_obstacles()
-  {
-    if (!external_static_obstacles_.has_value()) {
-      static_obstacles_.reset();
-      static_obstacle_positions_cache_.clear();
-      static_obstacle_hulls_cache_.clear();
-      static_obstacle_cache_ready_ = false;
-      return;
-    }
-
-    static_obstacles_ = external_static_obstacles_;
-    update_static_obstacle_cache(static_obstacles_.value());
   }
 
   void TVVFVONode::refresh_map_obstacle_cache(const Position& robot_pos)
   {
     (void)robot_pos;
-    map_obstacles_dirty_ = false;
   }
 
 } // namespace tvvf_vo_c

@@ -16,7 +16,6 @@
 
 #include "tvvf_vo_c/core/types.hpp"
 #include "tvvf_vo_c/core/global_field_generator.hpp"
-#include "tvvf_vo_c/core/repulsive_force.hpp"
 #include "tvvf_vo_c/core/smooth_velocity_optimizer.hpp"
 #include "tvvf_vo_c/core/region_utils.hpp"
 #include <memory>
@@ -40,13 +39,9 @@ public:
 private:
     // コア機能
     std::unique_ptr<GlobalFieldGenerator> global_field_generator_;
-    std::unique_ptr<RepulsiveForceCalculator> repulsive_force_calculator_;
     std::unique_ptr<SmoothVelocityOptimizer> velocity_optimizer_;
     TVVFVOConfig config_;
-    RepulsiveForceConfig repulsive_config_;
     CostMapSettings cost_map_settings_;
-    bool enable_global_repulsion_{true};
-    bool enable_repulsive_field_{false};
     std::optional<VectorField> latest_field_;
     std::optional<Velocity> previous_velocity_command_;
     std::string base_frame_;
@@ -59,14 +54,8 @@ private:
     std::optional<nav_msgs::msg::OccupancyGrid> current_map_;
     std::optional<visualization_msgs::msg::MarkerArray> static_obstacles_;
     std::optional<visualization_msgs::msg::MarkerArray> external_static_obstacles_;
-    std::vector<Position> static_obstacle_positions_cache_;
-    std::vector<ObstacleHull> static_obstacle_hulls_cache_;
-    bool static_obstacle_cache_ready_{false};
-    bool map_obstacles_dirty_{false};
-    double vector_field_publish_interval_{0.2};
     rclcpp::Time last_vector_field_publish_time_;
     int last_vector_field_marker_count_{0};
-    bool field_update_pending_;
 
     // TF2関連
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -123,9 +112,6 @@ public:
     // テスト用ユーティリティ
     void debug_handle_obstacles(const visualization_msgs::msg::MarkerArray::SharedPtr msg) { obstacles_callback(msg); }
     size_t debug_dynamic_obstacle_count() const { return dynamic_obstacles_.size(); }
-    bool debug_static_obstacle_cache_ready() const { return static_obstacle_cache_ready_; }
-    size_t debug_static_hull_count() const { return static_obstacle_hulls_cache_.size(); }
-    ObstacleHull debug_static_hull_at(size_t idx) const { return static_obstacle_hulls_cache_.at(idx); }
 
     /**
      * @brief 地図データコールバック
@@ -138,8 +124,6 @@ public:
      * @param msg MarkerArrayメッセージ
      */
     void obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg);
-    void update_static_obstacle_cache(const visualization_msgs::msg::MarkerArray& msg);
-    void update_combined_static_obstacles();
     void refresh_map_obstacle_cache(const Position& robot_pos);
 
 
@@ -190,10 +174,7 @@ private:
     void handle_goal_reached();
     ControlOutput compute_control_output();
     void update_visualization();
-    bool is_vector_field_publish_due(const rclcpp::Time& now) const;
     void publish_planned_path();
-    void request_static_field_update();
-    bool try_recompute_static_field();
     std::optional<FieldRegion> build_planning_region() const;
     double get_path_width_parameter() const;
     OptimizationOptions build_optimizer_options() const;

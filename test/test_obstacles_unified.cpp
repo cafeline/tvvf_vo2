@@ -69,9 +69,4 @@ TEST_F(ObstaclesUnifiedTest, ProcessesMergedObstacles)
   node->debug_handle_obstacles(std::make_shared<visualization_msgs::msg::MarkerArray>(msg));
 
   ASSERT_EQ(node->debug_dynamic_obstacle_count(), 2u);
-  EXPECT_TRUE(node->debug_static_obstacle_cache_ready());
-  ASSERT_EQ(node->debug_static_hull_count(), 1u);
-  const auto hull = node->debug_static_hull_at(0);
-  EXPECT_NEAR(hull.centroid.x, 0.0, 1e-9);
-  EXPECT_NEAR(hull.centroid.y, 0.0, 1e-9);
 }

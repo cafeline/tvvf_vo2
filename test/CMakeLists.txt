@@ -80,26 +80,6 @@ ament_target_dependencies(test_global_field_generator
     Eigen3
 )
 
-# Repulsive Forceテスト
-ament_add_gtest(test_repulsive_force
-    test_repulsive_force.cpp
-)
-
-target_include_directories(test_repulsive_force PUBLIC
-    ${CMAKE_SOURCE_DIR}/include
-)
-
-target_link_libraries(test_repulsive_force
-    ${PROJECT_NAME}_core
-)
-
-ament_target_dependencies(test_repulsive_force
-    rclcpp
-    nav_msgs
-    geometry_msgs
-    Eigen3
-)
-
 # Unified obstacles test
 ament_add_gtest(test_obstacles_unified
     test_obstacles_unified.cpp
