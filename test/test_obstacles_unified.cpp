@@ -27,6 +27,8 @@ using tvvf_vo_c::TVVFVONode;
 TEST_F(ObstaclesUnifiedTest, CombinesMapAndMask)
 {
   auto node = std::make_shared<TVVFVONode>();
+  node->set_parameter(rclcpp::Parameter("obstacle_mask_topic", "/obstacle_mask"));
+  node->set_parameter(rclcpp::Parameter("occupancy_clear_radius", 0.5));
 
   nav_msgs::msg::OccupancyGrid map;
   map.header.frame_id = "map";
@@ -47,11 +49,12 @@ TEST_F(ObstaclesUnifiedTest, CombinesMapAndMask)
 
   node->debug_set_map(map);
   node->debug_set_obstacle_mask(mask);
+  node->debug_set_robot_position(tvvf_vo_c::Position(1.5, 1.5));
 
   auto fused = node->debug_build_combined_map();
   ASSERT_TRUE(fused.has_value());
   auto idx = [](uint32_t x, uint32_t y) {return static_cast<size_t>(y) * 3 + x;};
 
-  EXPECT_EQ(fused->data[idx(1, 1)], 100);  // mask obstacle stamped
+  EXPECT_EQ(fused->data[idx(1, 1)], 0);    // clear radius prevents mask overwrite at robot pos
   EXPECT_EQ(fused->data[idx(0, 0)], 0);    // free cell propagated into unknown map
 }

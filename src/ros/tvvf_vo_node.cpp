@@ -72,6 +72,7 @@ namespace tvvf_vo_c
     this->declare_parameter("goal_tolerance", 0.1);
     this->declare_parameter("vector_field_path_width", 4.0);
     this->declare_parameter("obstacle_mask_topic", "/obstacle_mask");
+    this->declare_parameter("occupancy_clear_radius", 0.3);
 
     // 斥力パラメータ
     this->declare_parameter("costmap_occupied_threshold", 50.0);

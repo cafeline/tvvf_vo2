@@ -124,6 +124,9 @@ public:
     void debug_set_map(const nav_msgs::msg::OccupancyGrid & map) { current_map_ = map; }
     void debug_set_obstacle_mask(const nav_msgs::msg::OccupancyGrid & mask) { obstacle_mask_ = mask; }
     std::optional<nav_msgs::msg::OccupancyGrid> debug_build_combined_map() const { return build_combined_map(); }
+    void debug_set_robot_position(const Position & pos) {
+      robot_state_ = RobotState(pos, Velocity(0.0, 0.0), 0.0, 0.0, 0.0, 0.0);
+    }
 
     /**
      * @brief メイン制御ループ

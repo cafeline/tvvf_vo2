@@ -114,6 +114,35 @@ namespace tvvf_vo_c
     }
 
     nav_msgs::msg::OccupancyGrid merged = *current_map_;
+    const double clear_radius = std::max(
+      0.0, this->get_parameter("occupancy_clear_radius").as_double());
+    const bool has_robot_state = robot_state_.has_value();
+    const double clear_r2 = clear_radius * clear_radius;
+
+    if (has_robot_state && clear_radius > 0.0 &&
+      merged.info.width > 0 && merged.info.height > 0)
+    {
+      const double res = std::max(static_cast<double>(merged.info.resolution), 1e-6);
+      const double origin_x = merged.info.origin.position.x;
+      const double origin_y = merged.info.origin.position.y;
+      for (uint32_t row = 0; row < merged.info.height; ++row) {
+        for (uint32_t col = 0; col < merged.info.width; ++col) {
+          const size_t idx = static_cast<size_t>(row) * merged.info.width + col;
+          const int8_t val = merged.data[idx];
+          if (val < 0) {
+            continue;
+          }
+          const double wx = origin_x + (static_cast<double>(col) + 0.5) * res;
+          const double wy = origin_y + (static_cast<double>(row) + 0.5) * res;
+          const double dx = wx - robot_state_->position.x;
+          const double dy = wy - robot_state_->position.y;
+          if (dx * dx + dy * dy <= clear_r2) {
+            merged.data[idx] = 0;
+          }
+        }
+      }
+    }
+
     if (!obstacle_mask_.has_value()) {
       return merged;
     }
@@ -148,6 +177,13 @@ namespace tvvf_vo_c
         }
         const double wx = mask_origin_x + (static_cast<double>(col) + 0.5) * mask_res;
         const double wy = mask_origin_y + (static_cast<double>(row) + 0.5) * mask_res;
+        if (has_robot_state && clear_radius > 0.0) {
+          const double dx = wx - robot_state_->position.x;
+          const double dy = wy - robot_state_->position.y;
+          if (dx * dx + dy * dy <= clear_r2) {
+            continue;  // 足元セルはマスク適用しない
+          }
+        }
         const int map_col = static_cast<int>(std::floor((wx - map_origin_x) * inv_map_res));
         const int map_row = static_cast<int>(std::floor((wy - map_origin_y) * inv_map_res));
         if (map_col < 0 || map_row < 0 ||
