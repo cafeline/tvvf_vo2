@@ -8,7 +8,6 @@
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <nav_msgs/msg/path.hpp>
-#include <visualization_msgs/msg/marker_array.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -51,9 +50,8 @@ private:
     std::optional<RobotState> robot_state_;
     std::optional<Goal> goal_;
     std::vector<DynamicObstacle> dynamic_obstacles_;
+    std::optional<nav_msgs::msg::OccupancyGrid> obstacle_mask_;
     std::optional<nav_msgs::msg::OccupancyGrid> current_map_;
-    std::optional<visualization_msgs::msg::MarkerArray> static_obstacles_;
-    std::optional<visualization_msgs::msg::MarkerArray> external_static_obstacles_;
     rclcpp::Time last_vector_field_publish_time_;
     int last_vector_field_marker_count_{0};
 
@@ -72,7 +70,7 @@ private:
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr clicked_point_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_sub_;
-    rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr obstacles_sub_;
+    rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr obstacle_mask_sub_;
 
     // タイマー
     rclcpp::TimerBase::SharedPtr control_timer_;
@@ -109,10 +107,6 @@ public:
      */
     void goal_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
-    // テスト用ユーティリティ
-    void debug_handle_obstacles(const visualization_msgs::msg::MarkerArray::SharedPtr msg) { obstacles_callback(msg); }
-    size_t debug_dynamic_obstacle_count() const { return dynamic_obstacles_.size(); }
-
     /**
      * @brief 地図データコールバック
      * @param msg OccupancyGridメッセージ
@@ -120,12 +114,16 @@ public:
     void map_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg);
 
     /**
-     * @brief 障害物データコールバック（動的・静的共通）
-     * @param msg MarkerArrayメッセージ
+     * @brief 動的障害物マスクコールバック
+     * @param msg OccupancyGridメッセージ
      */
-    void obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg);
+    void obstacle_mask_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg);
     void refresh_map_obstacle_cache(const Position& robot_pos);
 
+    // テスト用
+    void debug_set_map(const nav_msgs::msg::OccupancyGrid & map) { current_map_ = map; }
+    void debug_set_obstacle_mask(const nav_msgs::msg::OccupancyGrid & mask) { obstacle_mask_ = mask; }
+    std::optional<nav_msgs::msg::OccupancyGrid> debug_build_combined_map() const { return build_combined_map(); }
 
     /**
      * @brief メイン制御ループ
@@ -179,6 +177,7 @@ private:
     double get_path_width_parameter() const;
     OptimizationOptions build_optimizer_options() const;
     void publish_command_marker(const geometry_msgs::msg::Twist& cmd_msg);
+    std::optional<nav_msgs::msg::OccupancyGrid> build_combined_map() const;
 
 private:
     friend class ObstaclesUnifiedTest;

@@ -50,23 +50,9 @@ namespace tvvf_vo_c
     current_map_ = *msg;
   }
 
-  void TVVFVONode::obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg)
+  void TVVFVONode::obstacle_mask_callback(const nav_msgs::msg::OccupancyGrid::SharedPtr msg)
   {
-    dynamic_obstacles_.clear();
-
-    for (const auto &marker : msg->markers)
-    {
-      if (marker.action == visualization_msgs::msg::Marker::ADD)
-      {
-        Position position(marker.pose.position.x, marker.pose.position.y);
-        Velocity velocity(0.0, 0.0);
-        double radius = std::max(marker.scale.x, marker.scale.y) / 2.0;
-        // DynamicObstacle構造体は3つの引数を取る（IDは持たない）
-        dynamic_obstacles_.emplace_back(position, velocity, radius);
-      }
-    }
-
-    external_static_obstacles_ = *msg;
+    obstacle_mask_ = *msg;
   }
 
   void TVVFVONode::refresh_map_obstacle_cache(const Position& robot_pos)

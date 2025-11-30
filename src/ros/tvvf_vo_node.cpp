@@ -44,10 +44,11 @@ namespace tvvf_vo_c
     goal_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
         "goal_pose", 10, std::bind(&TVVFVONode::goal_pose_callback, this, std::placeholders::_1));
 
-  // 障害物データをsubscribe（統合コールバック使用）
-  obstacles_sub_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(
-      "obstacles", 10,
-      std::bind(&TVVFVONode::obstacles_callback, this, std::placeholders::_1));
+    const auto mask_topic = this->get_parameter("obstacle_mask_topic").as_string();
+    auto mask_qos = rclcpp::QoS(1).reliable().transient_local();
+    obstacle_mask_sub_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+        mask_topic, mask_qos,
+        std::bind(&TVVFVONode::obstacle_mask_callback, this, std::placeholders::_1));
 
     // タイマー初期化（制御ループ：20Hz）
     control_timer_ = this->create_wall_timer(
@@ -70,6 +71,7 @@ namespace tvvf_vo_c
     // 制御関連
     this->declare_parameter("goal_tolerance", 0.1);
     this->declare_parameter("vector_field_path_width", 4.0);
+    this->declare_parameter("obstacle_mask_topic", "/obstacle_mask");
 
     // 斥力パラメータ
     this->declare_parameter("costmap_occupied_threshold", 50.0);

@@ -45,9 +45,17 @@ namespace tvvf_vo_c
       return ControlOutput(Velocity(0.0, 0.0), 0.01, 0.01, 0.0);
     }
 
+    auto map_to_use = build_combined_map();
+    if (!map_to_use.has_value()) {
+      latest_field_.reset();
+      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                          "Combined map unavailable - stopping");
+      return ControlOutput(Velocity(0.0, 0.0), 0.01, 0.01, 0.0);
+    }
+
     auto region = build_planning_region();
     latest_field_ = global_field_generator_->computeFieldOnTheFly(
-        current_map_.value(), goal_->position, dynamic_obstacles_, region);
+        map_to_use.value(), goal_->position, dynamic_obstacles_, region);
 
     if (!latest_field_.has_value() || latest_field_->width == 0 || latest_field_->height == 0) {
       latest_field_.reset();
@@ -97,6 +105,66 @@ namespace tvvf_vo_c
     if (latest_field_->width > 0 && latest_field_->height > 0) {
       publish_combined_field_visualization(*latest_field_);
     }
+  }
+
+  std::optional<nav_msgs::msg::OccupancyGrid> TVVFVONode::build_combined_map() const
+  {
+    if (!current_map_.has_value()) {
+      return std::nullopt;
+    }
+
+    nav_msgs::msg::OccupancyGrid merged = *current_map_;
+    if (!obstacle_mask_.has_value()) {
+      return merged;
+    }
+
+    const auto & mask = obstacle_mask_.value();
+    if (mask.info.width == 0 || mask.info.height == 0) {
+      return merged;
+    }
+
+    if (mask.header.frame_id != merged.header.frame_id) {
+      RCLCPP_WARN(
+        this->get_logger(),
+        "Obstacle mask frame_id (%s) differs from map (%s). Ignoring mask.",
+        mask.header.frame_id.c_str(), merged.header.frame_id.c_str());
+      return merged;
+    }
+
+    const double map_res = std::max(static_cast<double>(merged.info.resolution), 1e-6);
+    const double inv_map_res = 1.0 / map_res;
+    const double mask_res = std::max(static_cast<double>(mask.info.resolution), 1e-6);
+    const double map_origin_x = merged.info.origin.position.x;
+    const double map_origin_y = merged.info.origin.position.y;
+    const double mask_origin_x = mask.info.origin.position.x;
+    const double mask_origin_y = mask.info.origin.position.y;
+
+    for (uint32_t row = 0; row < mask.info.height; ++row) {
+      for (uint32_t col = 0; col < mask.info.width; ++col) {
+        const size_t idx_mask = static_cast<size_t>(row) * mask.info.width + col;
+        const int8_t val = mask.data[idx_mask];
+        if (val < 0) {
+          continue;
+        }
+        const double wx = mask_origin_x + (static_cast<double>(col) + 0.5) * mask_res;
+        const double wy = mask_origin_y + (static_cast<double>(row) + 0.5) * mask_res;
+        const int map_col = static_cast<int>(std::floor((wx - map_origin_x) * inv_map_res));
+        const int map_row = static_cast<int>(std::floor((wy - map_origin_y) * inv_map_res));
+        if (map_col < 0 || map_row < 0 ||
+            map_col >= static_cast<int>(merged.info.width) ||
+            map_row >= static_cast<int>(merged.info.height)) {
+          continue;
+        }
+        const size_t idx_map =
+          static_cast<size_t>(map_row) * merged.info.width + static_cast<size_t>(map_col);
+        if (val >= 100) {
+          merged.data[idx_map] = 100;
+        } else if (val == 0 && merged.data[idx_map] < 0) {
+          merged.data[idx_map] = 0;
+        }
+      }
+    }
+    return merged;
   }
 
 } // namespace tvvf_vo_c
