@@ -15,6 +15,8 @@ struct OptimizationOptions {
   double smooth_weight{4.0};
   double obstacle_weight{2.0};
   double obstacle_influence_range{1.5};
+  double repulsive_strength{1.0};
+  double repulsive_influence_range{2.0};
   double obstacle_safe_distance{0.4};
   double max_linear_acceleration{0.5};
 };

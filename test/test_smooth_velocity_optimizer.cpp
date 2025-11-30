@@ -14,10 +14,17 @@ protected:
 };
 
 TEST_F(SmoothVelocityOptimizerTest, FollowsDesiredWithoutObstacles) {
+  options.goal_weight = 1.0;
+  options.smooth_weight = 0.0;
+  options.obstacle_weight = 0.0;
+  options.max_linear_acceleration = 10.0;
+  optimizer.setOptions(options);
+
   OptimizationState state;
   state.desired_velocity = Velocity(0.8, 0.0);
   state.previous_velocity = Velocity(0.0, 0.0);
   state.max_speed = 1.0;
+  state.dt = 1.0;
 
   auto result = optimizer.computeOptimalVelocity(state);
   EXPECT_NEAR(result.vx, 0.8, 1e-3);
@@ -63,4 +70,74 @@ TEST_F(SmoothVelocityOptimizerTest, RespectsAccelerationLimit) {
 
   auto result = optimizer.computeOptimalVelocity(state);
   EXPECT_NEAR(result.vx, options.max_linear_acceleration * state.dt, 1e-6);
+}
+
+TEST_F(SmoothVelocityOptimizerTest, RepulsiveStrengthZeroDisablesAvoidance) {
+  options.goal_weight = 0.0;
+  options.smooth_weight = 0.0;
+  options.obstacle_weight = 1.0;
+  options.repulsive_strength = 0.0;
+  options.repulsive_influence_range = 1.0;
+  options.obstacle_safe_distance = 0.0;
+  options.max_linear_acceleration = 10.0;
+  optimizer.setOptions(options);
+
+  OptimizationState state;
+  state.desired_velocity = Velocity(0.0, 0.0);
+  state.previous_velocity = Velocity(0.0, 0.0);
+  state.robot_position = Position(0.0, 0.0);
+  state.static_obstacles = {Position(0.1, 0.0)};
+  state.max_speed = 1.0;
+  state.dt = 1.0;
+
+  auto result = optimizer.computeOptimalVelocity(state);
+  EXPECT_NEAR(result.vx, 0.0, 1e-6);
+  EXPECT_NEAR(result.vy, 0.0, 1e-6);
+}
+
+TEST_F(SmoothVelocityOptimizerTest, RepulsiveInfluenceRangeLimitsEffect) {
+  // 範囲を狭めると回避が発生しないことを確認
+  options.goal_weight = 0.0;
+  options.smooth_weight = 0.0;
+  options.obstacle_weight = 1.0;
+  options.repulsive_strength = 1.0;
+  options.repulsive_influence_range = 0.05;  // 障害物まで0.1mなので影響外
+  options.obstacle_safe_distance = 0.0;
+  options.max_linear_acceleration = 10.0;
+  optimizer.setOptions(options);
+
+  OptimizationState state;
+  state.desired_velocity = Velocity(0.0, 0.0);
+  state.previous_velocity = Velocity(0.0, 0.0);
+  state.robot_position = Position(0.0, 0.0);
+  state.static_obstacles = {Position(0.1, 0.0)};
+  state.max_speed = 1.0;
+  state.dt = 1.0;
+
+  auto result = optimizer.computeOptimalVelocity(state);
+  EXPECT_NEAR(result.vx, 0.0, 1e-6);
+}
+
+TEST_F(SmoothVelocityOptimizerTest, RepulsiveStrengthScalesAvoidance) {
+  options.goal_weight = 0.0;
+  options.smooth_weight = 0.0;
+  options.obstacle_weight = 1.0;
+  options.repulsive_strength = 4.0;
+  options.repulsive_influence_range = 0.5;
+  options.obstacle_safe_distance = 0.0;
+  options.max_linear_acceleration = 10.0;
+  optimizer.setOptions(options);
+
+  OptimizationState state;
+  state.desired_velocity = Velocity(0.0, 0.0);
+  state.previous_velocity = Velocity(0.0, 0.0);
+  state.robot_position = Position(0.0, 0.0);
+  state.static_obstacles = {Position(0.1, 0.0)};
+  state.max_speed = 1.0;
+  state.dt = 1.0;
+
+  auto result = optimizer.computeOptimalVelocity(state);
+  // 斥力でXマイナス方向に押されるはず
+  EXPECT_LT(result.vx, -0.01);
+  EXPECT_NEAR(result.vy, 0.0, 1e-6);
 }

@@ -46,8 +46,9 @@ namespace tvvf_vo_c
       return ControlOutput(Velocity(0.0, 0.0), 0.01, 0.01, 0.0);
     }
 
-    auto field_vector = global_field_generator_->getVelocityAt(
+    auto base_field_vector = global_field_generator_->getVelocityAt(
         robot_state_->position, dynamic_obstacles_);
+    auto field_vector = compute_navigation_vector(base_field_vector, robot_state_->position);
 
     const double vector_norm = std::hypot(field_vector[0], field_vector[1]);
     Velocity desired_velocity(0.0, 0.0);
@@ -61,7 +62,7 @@ namespace tvvf_vo_c
     opt_state.previous_velocity = previous_velocity_command_.value_or(Velocity(0.0, 0.0));
     opt_state.robot_position = robot_state_->position;
     opt_state.dynamic_obstacles = dynamic_obstacles_;
-    opt_state.static_obstacles = static_obstacle_positions_cache_;
+    opt_state.static_obstacles.clear();  // 静的障害物は repulsive force に統合済み
     opt_state.max_speed = config_.max_linear_velocity;
     opt_state.dt = 0.05;
 

@@ -79,11 +79,6 @@ namespace tvvf_vo_c
     this->declare_parameter("repulsive_strength", 1.0);
     this->declare_parameter("repulsive_influence_range", 2.0);
     this->declare_parameter("enable_global_repulsion", true);
-    this->declare_parameter("map_repulsion_enabled", false);
-    this->declare_parameter("map_repulsion_max_distance", 6.0);
-    this->declare_parameter("map_repulsion_sampling_step", 0.5);
-    this->declare_parameter("map_repulsion_recompute_distance", 1.0);
-    this->declare_parameter("map_repulsion_occupancy_threshold", 50);
     this->declare_parameter("costmap_occupied_threshold", 50.0);
     this->declare_parameter("costmap_free_threshold", 10.0);
     this->declare_parameter("costmap_alpha", 1.0);
@@ -111,22 +106,7 @@ namespace tvvf_vo_c
     repulsive_config_.repulsive_strength = this->get_parameter("repulsive_strength").as_double();
     repulsive_config_.influence_range = this->get_parameter("repulsive_influence_range").as_double();
     enable_global_repulsion_ = this->get_parameter("enable_global_repulsion").as_bool();
-    enable_map_repulsion_ = this->get_parameter("map_repulsion_enabled").as_bool();
 
-    map_repulsion_settings_.max_distance = this->get_parameter("map_repulsion_max_distance").as_double();
-    map_repulsion_settings_.sampling_step = this->get_parameter("map_repulsion_sampling_step").as_double();
-    if (map_repulsion_settings_.sampling_step <= 0.0) {
-      map_repulsion_settings_.sampling_step = 0.5;
-    }
-    const int occupancy_threshold =
-        this->get_parameter("map_repulsion_occupancy_threshold").as_int();
-    map_repulsion_settings_.occupancy_threshold = static_cast<int8_t>(
-        std::clamp(occupancy_threshold, 0, 100));
-
-    map_repulsion_recompute_distance_ =
-        std::max(0.1, this->get_parameter("map_repulsion_recompute_distance").as_double());
-    map_repulsion_recompute_distance_sq_ =
-        map_repulsion_recompute_distance_ * map_repulsion_recompute_distance_;
     vector_field_publish_interval_ = std::max(0.0, this->get_parameter("vector_field_publish_interval").as_double());
     RCLCPP_INFO(this->get_logger(), "Vector field publish interval set to %.3f [s]", vector_field_publish_interval_);
 
@@ -226,6 +206,8 @@ namespace tvvf_vo_c
     options.smooth_weight = config_.smooth_weight;
     options.obstacle_weight = config_.obstacle_weight;
     options.obstacle_influence_range = config_.obstacle_influence_range;
+    options.repulsive_strength = repulsive_config_.repulsive_strength;
+    options.repulsive_influence_range = repulsive_config_.influence_range;
     options.obstacle_safe_distance = config_.obstacle_safe_distance;
     options.max_linear_acceleration = config_.max_linear_acceleration;
     return options;

@@ -44,8 +44,8 @@ namespace tvvf_vo_c
           // ワールド座標に変換
           const Position world_pos = field.gridToWorld(x, y);
 
-          // 合成ベクトルを計算
-          const auto combined_vector = calculate_combined_vector(field.vectors[y][x], world_pos);
+          // 合成ベクトルを計算（制御と同じ計算を利用）
+          const auto combined_vector = compute_navigation_vector(field.vectors[y][x], world_pos);
 
           if (!is_valid_position(world_pos) || !is_valid_vector(combined_vector)) {
             RCLCPP_WARN_THROTTLE(
@@ -79,8 +79,15 @@ namespace tvvf_vo_c
       const std::array<double, 2>& original_vector,
       const Position& world_pos) const
   {
+    return compute_navigation_vector(original_vector, world_pos);
+  }
+
+  std::array<double, 2> TVVFVONode::compute_navigation_vector(
+      const std::array<double, 2>& base_vector,
+      const Position& world_pos) const
+  {
     // 元のベクトル場の値
-    std::array<double, 2> combined = original_vector;
+    std::array<double, 2> combined = base_vector;
 
     // 斥力を追加
     if (static_obstacle_cache_ready_ && repulsive_force_calculator_) {

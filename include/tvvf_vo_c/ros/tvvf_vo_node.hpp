@@ -17,7 +17,6 @@
 #include "tvvf_vo_c/core/global_field_generator.hpp"
 #include "tvvf_vo_c/core/repulsive_force.hpp"
 #include "tvvf_vo_c/core/smooth_velocity_optimizer.hpp"
-#include "tvvf_vo_c/core/map_repulsion.hpp"
 #include "tvvf_vo_c/core/region_utils.hpp"
 #include <memory>
 #include <vector>
@@ -54,10 +53,8 @@ private:
     std::unique_ptr<SmoothVelocityOptimizer> velocity_optimizer_;
     TVVFVOConfig config_;
     RepulsiveForceConfig repulsive_config_;
-    MapRepulsionSettings map_repulsion_settings_;
     CostMapSettings cost_map_settings_;
     bool enable_global_repulsion_{true};
-    bool enable_map_repulsion_{false};
     std::optional<Velocity> previous_velocity_command_;
     std::string base_frame_;
     int cmd_velocity_marker_seq_{0};
@@ -73,9 +70,6 @@ private:
     std::vector<ObstacleHull> static_obstacle_hulls_cache_;
     bool static_obstacle_cache_ready_{false};
     bool map_obstacles_dirty_{false};
-    std::optional<Position> last_map_repulsion_center_;
-    double map_repulsion_recompute_distance_{1.0};
-    double map_repulsion_recompute_distance_sq_{1.0};
     double vector_field_publish_interval_{0.2};
     rclcpp::Time last_vector_field_publish_time_;
     int last_vector_field_marker_count_{0};
@@ -218,6 +212,9 @@ private:
     // 可視化ヘルパー関数
     std::array<double, 2> calculate_combined_vector(
         const std::array<double, 2>& original_vector,
+        const Position& world_pos) const;
+    std::array<double, 2> compute_navigation_vector(
+        const std::array<double, 2>& base_vector,
         const Position& world_pos) const;
 
     bool should_visualize_vector(const std::array<double, 2>& vector) const;

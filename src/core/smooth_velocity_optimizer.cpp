@@ -66,7 +66,11 @@ Velocity SmoothVelocityOptimizer::computeAvoidanceVector(
     double dx = robot_pos.x - obs.position.x;
     double dy = robot_pos.y - obs.position.y;
     double distance = std::hypot(dx, dy);
-    double effective_range = std::max(options_.obstacle_influence_range,
+
+    const double base_range = options_.repulsive_influence_range > 0.0
+        ? options_.repulsive_influence_range
+        : options_.obstacle_influence_range;
+    double effective_range = std::max(base_range,
                                       obs.radius + options_.obstacle_safe_distance);
 
     if (distance < EPSILON || distance > effective_range) {
@@ -81,6 +85,8 @@ Velocity SmoothVelocityOptimizer::computeAvoidanceVector(
     avoidance.vy += (dy * inv_dist) * strength;
   }
 
+  avoidance.vx *= options_.repulsive_strength;
+  avoidance.vy *= options_.repulsive_strength;
   return avoidance;
 }
 
