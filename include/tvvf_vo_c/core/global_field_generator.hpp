@@ -29,6 +29,12 @@ public:
                                 const Position& goal,
                                 const std::optional<FieldRegion>& region = std::nullopt);
     
+    // 毎フレームのオンデマンド生成（静的事前計算なし）
+    VectorField computeFieldOnTheFly(const nav_msgs::msg::OccupancyGrid& map,
+                                     const Position& goal,
+                                     const std::vector<DynamicObstacle>& obstacles,
+                                     const std::optional<FieldRegion>& region = std::nullopt);
+    
     // 動的障害物を考慮したベクトル場生成
     VectorField generateField(const std::vector<DynamicObstacle>& obstacles);
     

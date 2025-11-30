@@ -90,6 +90,50 @@ namespace {
             )
         };
     }
+
+    void stampDynamicObstacles(nav_msgs::msg::OccupancyGrid& map,
+                               const std::vector<DynamicObstacle>& obstacles,
+                               double inflation_margin) {
+        if (map.info.resolution <= 0.0 || map.data.empty()) {
+            return;
+        }
+
+        const double res = map.info.resolution;
+        const double origin_x = map.info.origin.position.x;
+        const double origin_y = map.info.origin.position.y;
+        const int width = static_cast<int>(map.info.width);
+        const int height = static_cast<int>(map.info.height);
+
+        auto clamp_index = [](int v, int min_v, int max_v) {
+            return std::max(min_v, std::min(v, max_v));
+        };
+
+        for (const auto& obs : obstacles) {
+            const double inflated_radius = std::max(obs.radius + inflation_margin, res * 0.5);
+
+            const double min_x = obs.position.x - inflated_radius;
+            const double max_x = obs.position.x + inflated_radius;
+            const double min_y = obs.position.y - inflated_radius;
+            const double max_y = obs.position.y + inflated_radius;
+
+            int min_ix = clamp_index(static_cast<int>(std::floor((min_x - origin_x) / res)), 0, width - 1);
+            int max_ix = clamp_index(static_cast<int>(std::ceil((max_x - origin_x) / res)), 0, width - 1);
+            int min_iy = clamp_index(static_cast<int>(std::floor((min_y - origin_y) / res)), 0, height - 1);
+            int max_iy = clamp_index(static_cast<int>(std::ceil((max_y - origin_y) / res)), 0, height - 1);
+
+            for (int y = min_iy; y <= max_iy; ++y) {
+                for (int x = min_ix; x <= max_ix; ++x) {
+                    const double cx = origin_x + (static_cast<double>(x) + 0.5) * res;
+                    const double cy = origin_y + (static_cast<double>(y) + 0.5) * res;
+                    const double dx = cx - obs.position.x;
+                    const double dy = cy - obs.position.y;
+                    if (std::hypot(dx, dy) <= inflated_radius) {
+                        map.data[static_cast<size_t>(y) * width + x] = 100;
+                    }
+                }
+            }
+        }
+    }
 }
 
 // コンストラクタ
@@ -145,6 +189,59 @@ void GlobalFieldGenerator::precomputeStaticField(const nav_msgs::msg::OccupancyG
     static_field_ = fast_marching_->getField();
     static_field_.region = applied_region;
     static_field_computed_ = true;
+}
+
+VectorField GlobalFieldGenerator::computeFieldOnTheFly(
+    const nav_msgs::msg::OccupancyGrid& map,
+    const Position& goal,
+    const std::vector<DynamicObstacle>& obstacles,
+    const std::optional<FieldRegion>& region) {
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    nav_msgs::msg::OccupancyGrid cropped_map;
+    const nav_msgs::msg::OccupancyGrid* map_ptr = &map;
+    std::optional<FieldRegion> applied_region = std::nullopt;
+
+    if (region.has_value()) {
+        if (auto cropped = cropOccupancyGrid(map, region.value())) {
+            cropped_map = std::move(cropped->map);
+            applied_region = cropped->region;
+            map_ptr = &cropped_map;
+        }
+    }
+
+    if (map_ptr->info.width == 0 || map_ptr->info.height == 0) {
+        static_field_computed_ = false;
+        return VectorField();
+    }
+
+    nav_msgs::msg::OccupancyGrid map_with_obstacles = *map_ptr;
+    if (!obstacles.empty()) {
+        const double inflation = std::max(cost_map_settings_.clearance_epsilon, map_with_obstacles.info.resolution * 0.5);
+        stampDynamicObstacles(map_with_obstacles, obstacles, inflation);
+    }
+
+    auto cost_map = cost_map_builder_.build(map_with_obstacles);
+    if (!cost_map.isValid()) {
+        static_field_computed_ = false;
+        return VectorField();
+    }
+
+    last_cost_map_result_ = cost_map;
+
+    fast_marching_->initializeFromOccupancyGrid(map_with_obstacles, cost_map.speed_layer);
+    fast_marching_->computeDistanceField(goal);
+    fast_marching_->generateVectorField();
+
+    static_field_ = fast_marching_->getField();
+    static_field_.region = applied_region;
+    static_field_computed_ = true;
+
+    auto end = std::chrono::high_resolution_clock::now();
+    last_computation_time_ = std::chrono::duration<double>(end - start).count();
+
+    return static_field_;
 }
 
 // 動的障害物を考慮したフィールド生成

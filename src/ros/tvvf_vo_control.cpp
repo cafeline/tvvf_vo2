@@ -13,7 +13,7 @@ namespace tvvf_vo_c
       const bool robot_ok = update_robot_state();
 
       if (field_update_pending_) {
-        try_recompute_static_field();
+        field_update_pending_ = false;  // 毎フレーム生成に移行したため事前計算は行わない
       }
 
       if (!robot_ok) {
@@ -118,9 +118,9 @@ namespace tvvf_vo_c
     previous_velocity_command_.reset();
   }
 
-  void TVVFVONode::publish_planned_path()
+void TVVFVONode::publish_planned_path()
 {
-  if (!robot_state_.has_value() || !goal_.has_value() || !current_map_.has_value()) {
+  if (!robot_state_.has_value() || !goal_.has_value() || !latest_field_.has_value()) {
     return;
   }
 
@@ -152,18 +152,12 @@ namespace tvvf_vo_c
       break;
     }
 
-    // ベクトル場から次の位置を計算
-    if (global_field_generator_ && global_field_generator_->isStaticFieldReady()) {
-      std::vector<DynamicObstacle> empty_obstacles;  // 簡易実装：動的障害物なし
-      auto field_vector = global_field_generator_->getVelocityAt(current_pos, empty_obstacles);
-      double norm = std::sqrt(field_vector[0] * field_vector[0] + field_vector[1] * field_vector[1]);
+    auto field_vector = latest_field_->getVector(current_pos);
+    double norm = std::sqrt(field_vector[0] * field_vector[0] + field_vector[1] * field_vector[1]);
 
-      if (norm > 0.001) {
-        current_pos.x += (field_vector[0] / norm) * step_size;
-        current_pos.y += (field_vector[1] / norm) * step_size;
-      } else {
-        break;
-      }
+    if (norm > 0.001) {
+      current_pos.x += (field_vector[0] / norm) * step_size;
+      current_pos.y += (field_vector[1] / norm) * step_size;
     } else {
       break;
     }

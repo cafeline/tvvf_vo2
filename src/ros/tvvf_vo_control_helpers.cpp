@@ -39,15 +39,25 @@ namespace tvvf_vo_c
 
   ControlOutput TVVFVONode::compute_control_output()
   {
-    // グローバルフィールドが準備できていない場合は停止
-    if (!global_field_generator_ || !global_field_generator_->isStaticFieldReady()) {
+    if (!global_field_generator_ || !current_map_.has_value() || !goal_.has_value()) {
+      latest_field_.reset();
       RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                          "Global field not ready - stopping");
+                          "Map/goal not ready - stopping");
       return ControlOutput(Velocity(0.0, 0.0), 0.01, 0.01, 0.0);
     }
 
-    auto base_field_vector = global_field_generator_->getVelocityAt(
-        robot_state_->position, dynamic_obstacles_);
+    auto region = build_planning_region();
+    latest_field_ = global_field_generator_->computeFieldOnTheFly(
+        current_map_.value(), goal_->position, dynamic_obstacles_, region);
+
+    if (!latest_field_.has_value() || latest_field_->width == 0 || latest_field_->height == 0) {
+      latest_field_.reset();
+      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                          "Vector field generation failed - stopping");
+      return ControlOutput(Velocity(0.0, 0.0), 0.01, 0.01, 0.0);
+    }
+
+    auto base_field_vector = latest_field_->getVector(robot_state_->position);
     auto field_vector = compute_navigation_vector(base_field_vector, robot_state_->position);
 
     const double vector_norm = std::hypot(field_vector[0], field_vector[1]);
@@ -86,9 +96,12 @@ namespace tvvf_vo_c
       return;
     }
 
-    const VectorField global_field = global_field_generator_->generateField(dynamic_obstacles_);
-    if (global_field.width > 0 && global_field.height > 0) {
-      publish_combined_field_visualization(global_field);
+    if (!latest_field_.has_value()) {
+      return;
+    }
+
+    if (latest_field_->width > 0 && latest_field_->height > 0) {
+      publish_combined_field_visualization(*latest_field_);
       last_vector_field_publish_time_ = now;
     }
   }

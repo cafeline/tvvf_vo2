@@ -202,6 +202,54 @@ TEST_F(GlobalFieldGeneratorTest, EndToEndGradientGuidanceAvoidsWall) {
     }
 }
 
+TEST_F(GlobalFieldGeneratorTest, ComputesFieldOnTheFlyWithDynamicObstacleStamped) {
+    // マップは10x10m、解像度1.0mの自由空間
+    nav_msgs::msg::OccupancyGrid map;
+    map.info.width = 10;
+    map.info.height = 10;
+    map.info.resolution = 1.0;
+    map.info.origin.position.x = 0.0;
+    map.info.origin.position.y = 0.0;
+    map.data.assign(map.info.width * map.info.height, 0);
+
+    // ゴールを設定（事前計算なし）
+    Position goal(9.0, 5.0);
+
+    // 動的障害物を中央に配置し、1m半径でブロック
+    DynamicObstacle dyn(Position(5.0, 5.0), Velocity(0.0, 0.0), 1.0);
+    std::vector<DynamicObstacle> obstacles = {dyn};
+
+    // On-the-flyでベクトル場を生成
+    auto field = generator.computeFieldOnTheFly(map, goal, obstacles, std::nullopt);
+    ASSERT_GT(field.width, 0);
+    ASSERT_GT(field.height, 0);
+
+    // 生成されたベクトル場でスタート(1,5)からゴールへ進むシミュレーション
+    Position pose(1.0, 5.0);
+    bool reached = false;
+    const double step_size = 0.25;
+    for (int i = 0; i < 200; ++i) {
+        auto vec = field.getVector(pose);
+        const double norm = std::hypot(vec[0], vec[1]);
+        if (norm < 1e-4) {
+            break;
+        }
+
+        pose.x += vec[0] / norm * step_size;
+        pose.y += vec[1] / norm * step_size;
+
+        // 障害物近傍に入っていないことを確認（動的障害物がOccupancyに刻まれている前提）
+        EXPECT_GT(std::hypot(pose.x - dyn.position.x, pose.y - dyn.position.y), dyn.radius - 1e-3);
+
+        if (std::hypot(goal.x - pose.x, goal.y - pose.y) < 0.5) {
+            reached = true;
+            break;
+        }
+    }
+
+    EXPECT_TRUE(reached) << "final pose=(" << pose.x << ", " << pose.y << ")";
+}
+
 // TEST 6: ブレンディングのテスト
 TEST_F(GlobalFieldGeneratorTest, BlendingWithDynamicObstacles) {
     // Given: 静的場が計算済み

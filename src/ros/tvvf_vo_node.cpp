@@ -81,6 +81,7 @@ namespace tvvf_vo_c
     this->declare_parameter("repulsive_strength", 1.0);
     this->declare_parameter("repulsive_influence_range", 2.0);
     this->declare_parameter("enable_global_repulsion", true);
+    this->declare_parameter("enable_repulsive_field", false);
     this->declare_parameter("costmap_occupied_threshold", 50.0);
     this->declare_parameter("costmap_free_threshold", 10.0);
     this->declare_parameter("costmap_alpha", 1.0);
@@ -108,6 +109,7 @@ namespace tvvf_vo_c
     repulsive_config_.repulsive_strength = this->get_parameter("repulsive_strength").as_double();
     repulsive_config_.influence_range = this->get_parameter("repulsive_influence_range").as_double();
     enable_global_repulsion_ = this->get_parameter("enable_global_repulsion").as_bool();
+    enable_repulsive_field_ = this->get_parameter("enable_repulsive_field").as_bool();
 
     vector_field_publish_interval_ = std::max(0.0, this->get_parameter("vector_field_publish_interval").as_double());
     RCLCPP_INFO(this->get_logger(), "Vector field publish interval set to %.3f [s]", vector_field_publish_interval_);

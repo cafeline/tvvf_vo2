@@ -46,6 +46,8 @@ private:
     RepulsiveForceConfig repulsive_config_;
     CostMapSettings cost_map_settings_;
     bool enable_global_repulsion_{true};
+    bool enable_repulsive_field_{false};
+    std::optional<VectorField> latest_field_;
     std::optional<Velocity> previous_velocity_command_;
     std::string base_frame_;
     int cmd_velocity_marker_seq_{0};
