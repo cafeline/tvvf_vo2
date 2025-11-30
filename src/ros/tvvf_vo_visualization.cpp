@@ -4,42 +4,29 @@
 
 namespace tvvf_vo_c
 {
-  using namespace visualization_constants;
+  namespace {
+    constexpr double MIN_VECTOR_MAGNITUDE = 0.01;
+  }
 
   void TVVFVONode::publish_empty_visualization()
   {
-    auto empty_marker_array = visualization_msgs::msg::MarkerArray();
-    auto delete_marker = visualization_msgs::msg::Marker();
-    delete_marker.header.frame_id = this->get_parameter("global_frame").as_string();
-    delete_marker.header.stamp = this->get_clock()->now();
-    delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
-    delete_marker.id = 0;
-    empty_marker_array.markers.push_back(delete_marker);
-
-    vector_field_pub_->publish(empty_marker_array);
+    // PoseArray のみで、特にクリア処理は不要
   }
 
   void TVVFVONode::publish_combined_field_visualization(const VectorField& field)
   {
     try
     {
-      auto marker_array = visualization_msgs::msg::MarkerArray();
+      geometry_msgs::msg::PoseArray pose_array;
       const std::string global_frame = this->get_parameter("global_frame").as_string();
 
-      // 既存マーカーをクリア
-      auto delete_marker = visualization_msgs::msg::Marker();
-      delete_marker.header.frame_id = global_frame;
-      delete_marker.header.stamp = this->get_clock()->now();
-      delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
-      delete_marker.id = 0;
-      marker_array.markers.push_back(delete_marker);
+      pose_array.header.frame_id = global_frame;
+      pose_array.header.stamp = this->get_clock()->now();
 
-      int marker_id = 1;
-
-      // グリッドをサンプリングして可視化
-      for (int y = 0; y < field.height; y += DEFAULT_GRID_STRIDE)
+      // ベクトル場と同じ解像度ですべてのセルを追加
+      for (int y = 0; y < field.height; ++y)
       {
-        for (int x = 0; x < field.width; x += DEFAULT_GRID_STRIDE)
+        for (int x = 0; x < field.width; ++x)
         {
           // ワールド座標に変換
           const Position world_pos = field.gridToWorld(x, y);
@@ -60,26 +47,27 @@ namespace tvvf_vo_c
             continue;
           }
 
-          // 矢印マーカーを作成して追加
-          auto arrow_marker = create_arrow_marker(world_pos, combined_vector, marker_id++, global_frame);
-          marker_array.markers.push_back(arrow_marker);
+          // PoseArrayへ追加（RVizで軽量表示用）
+          geometry_msgs::msg::Pose pose;
+          pose.position.x = world_pos.x;
+          pose.position.y = world_pos.y;
+          pose.position.z = 0.0;
+          const double yaw = std::atan2(combined_vector[1], combined_vector[0]);
+          tf2::Quaternion q;
+          q.setRPY(0.0, 0.0, yaw);
+          pose.orientation = tf2::toMsg(q);
+          pose_array.poses.push_back(pose);
         }
       }
 
-      vector_field_pub_->publish(marker_array);
+      if (vector_field_pose_pub_ && !pose_array.poses.empty()) {
+        vector_field_pose_pub_->publish(pose_array);
+      }
     }
     catch (const std::exception &e)
     {
       RCLCPP_ERROR(this->get_logger(), "Combined field visualization error: %s", e.what());
     }
-  }
-
-  // ヘルパー関数: 合成ベクトルを計算
-  std::array<double, 2> TVVFVONode::calculate_combined_vector(
-      const std::array<double, 2>& original_vector,
-      const Position& world_pos) const
-  {
-    return compute_navigation_vector(original_vector, world_pos);
   }
 
   std::array<double, 2> TVVFVONode::compute_navigation_vector(
@@ -90,11 +78,19 @@ namespace tvvf_vo_c
     std::array<double, 2> combined = base_vector;
 
     // 斥力を追加
-    if (static_obstacle_cache_ready_ && repulsive_force_calculator_) {
-      const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromHulls(
-          world_pos, static_obstacle_hulls_cache_);
-      combined[0] += repulsive_force.x;
-      combined[1] += repulsive_force.y;
+    if (repulsive_force_calculator_) {
+      if (!static_obstacle_hulls_cache_.empty()) {
+        const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromHulls(
+            world_pos, static_obstacle_hulls_cache_);
+        combined[0] += repulsive_force.x;
+        combined[1] += repulsive_force.y;
+      }
+      if (!static_obstacle_positions_cache_.empty()) {
+        const auto repulsive_force = repulsive_force_calculator_->calculateTotalForceFromPositions(
+            world_pos, static_obstacle_positions_cache_);
+        combined[0] += repulsive_force.x;
+        combined[1] += repulsive_force.y;
+      }
     }
 
     return combined;
@@ -115,57 +111,6 @@ namespace tvvf_vo_c
   bool TVVFVONode::is_valid_vector(const std::array<double, 2>& vector) const
   {
     return std::isfinite(vector[0]) && std::isfinite(vector[1]);
-  }
-
-  // ヘルパー関数: 矢印マーカーを作成
-  visualization_msgs::msg::Marker TVVFVONode::create_arrow_marker(
-      const Position& position,
-      const std::array<double, 2>& vector,
-      int marker_id,
-      const std::string& frame_id) const
-  {
-    visualization_msgs::msg::Marker marker;
-    marker.header.frame_id = frame_id;
-    marker.header.stamp = this->now();
-    marker.id = marker_id;
-    marker.type = visualization_msgs::msg::Marker::ARROW;
-    marker.action = visualization_msgs::msg::Marker::ADD;
-
-    // 矢印の始点と終点を設定
-    geometry_msgs::msg::Point start, end;
-    start.x = position.x;
-    start.y = position.y;
-    start.z = 0.0;
-
-    // ベクトルを正規化してから矢印の長さを適用
-    const double magnitude = std::sqrt(vector[0] * vector[0] + vector[1] * vector[1]);
-    const double safe_magnitude = std::isfinite(magnitude) ? magnitude : 0.0;
-    if (safe_magnitude > MIN_VECTOR_MAGNITUDE) {
-      end.x = position.x + (vector[0] / safe_magnitude) * DEFAULT_ARROW_LENGTH;
-      end.y = position.y + (vector[1] / safe_magnitude) * DEFAULT_ARROW_LENGTH;
-    } else {
-      end.x = position.x + vector[0] * DEFAULT_ARROW_LENGTH;
-      end.y = position.y + vector[1] * DEFAULT_ARROW_LENGTH;
-    }
-    end.z = 0.0;
-
-    marker.points.push_back(start);
-    marker.points.push_back(end);
-
-    // 矢印のスケール設定
-    marker.scale.x = ARROW_SHAFT_WIDTH;
-    marker.scale.y = ARROW_HEAD_WIDTH;
-    marker.scale.z = 0.0;
-
-    // 速度に基づく色設定（赤〜緑のグラデーション）
-    const double normalized_magnitude = std::clamp(safe_magnitude, 0.0, 1.0);
-    marker.color.r = normalized_magnitude;
-    marker.color.g = 1.0 - normalized_magnitude;
-    marker.color.b = 0.0;
-    marker.color.a = ARROW_ALPHA;
-
-    marker.lifetime = rclcpp::Duration(0, 0);
-    return marker;
   }
 
 } // namespace tvvf_vo_c

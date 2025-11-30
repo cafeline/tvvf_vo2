@@ -67,18 +67,26 @@ namespace tvvf_vo_c
 
   void TVVFVONode::update_static_obstacle_cache(const visualization_msgs::msg::MarkerArray& msg)
   {
-    if (repulsive_force_calculator_ && !msg.markers.empty()) {
-      static_obstacle_hulls_cache_ = repulsive_force_calculator_->extractObstacleHulls(msg);
-      static_obstacle_positions_cache_.clear();
-      for (const auto& hull : static_obstacle_hulls_cache_) {
-        static_obstacle_positions_cache_.push_back(hull.centroid);
-      }
-      static_obstacle_cache_ready_ = !static_obstacle_hulls_cache_.empty();
-    } else {
-      static_obstacle_positions_cache_.clear();
-      static_obstacle_hulls_cache_.clear();
-      static_obstacle_cache_ready_ = false;
+    static_obstacle_positions_cache_.clear();
+    static_obstacle_hulls_cache_.clear();
+    static_obstacle_cache_ready_ = false;
+
+    if (!repulsive_force_calculator_ || msg.markers.empty()) {
+      return;
     }
+
+    static_obstacle_hulls_cache_ = repulsive_force_calculator_->extractObstacleHulls(msg);
+    for (const auto& hull : static_obstacle_hulls_cache_) {
+      static_obstacle_positions_cache_.push_back(hull.centroid);
+    }
+
+    if (static_obstacle_hulls_cache_.empty()) {
+      for (const auto& marker : msg.markers) {
+        static_obstacle_positions_cache_.emplace_back(marker.pose.position.x, marker.pose.position.y);
+      }
+    }
+
+    static_obstacle_cache_ready_ = !static_obstacle_positions_cache_.empty() || !static_obstacle_hulls_cache_.empty();
   }
 
   void TVVFVONode::obstacles_callback(const visualization_msgs::msg::MarkerArray::SharedPtr msg)

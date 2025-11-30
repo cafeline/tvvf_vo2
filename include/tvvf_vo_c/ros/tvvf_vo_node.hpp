@@ -5,6 +5,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -26,16 +27,6 @@
 namespace tvvf_vo_c {
 
 // 可視化パラメータの定数
-namespace visualization_constants {
-    constexpr int DEFAULT_GRID_STRIDE = 2.5;           // グリッドサンプリング間隔
-    constexpr double DEFAULT_ARROW_LENGTH = 0.3;     // 矢印の長さ[m]
-    constexpr double ARROW_SHAFT_WIDTH = 0.05;       // 矢印シャフトの太さ
-    constexpr double ARROW_HEAD_WIDTH = 0.1;         // 矢印ヘッドの太さ
-    constexpr double ARROW_ALPHA = 0.7;              // 矢印の透明度
-    constexpr double MIN_VECTOR_MAGNITUDE = 0.01;    // 表示する最小ベクトル大きさ
-    constexpr double MARKER_LIFETIME_SEC = 0.1;      // マーカーの寿命[秒]
-}
-
 /**
  * @brief TVVF-VO ROS2ナビゲーションノード
  */
@@ -81,7 +72,7 @@ private:
 
     // パブリッシャー
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr vector_field_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr vector_field_pose_pub_;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr planned_path_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr goal_marker_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr cmd_velocity_marker_pub_;
@@ -220,12 +211,6 @@ private:
     bool should_visualize_vector(const std::array<double, 2>& vector) const;
     bool is_valid_position(const Position& position) const;
     bool is_valid_vector(const std::array<double, 2>& vector) const;
-
-    visualization_msgs::msg::Marker create_arrow_marker(
-        const Position& position,
-        const std::array<double, 2>& vector,
-        int marker_id,
-        const std::string& frame_id) const;
 
 };
 

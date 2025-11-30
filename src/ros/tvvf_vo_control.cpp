@@ -10,20 +10,24 @@ namespace tvvf_vo_c
   {
     try
     {
-      // ロボット状態の更新とチェック
-      if (!update_robot_state()) {
+      const bool robot_ok = update_robot_state();
+
+      if (field_update_pending_) {
+        try_recompute_static_field();
+      }
+
+      if (!robot_ok) {
+        // ロボット姿勢が取れなくても可視化は進める
+        update_visualization();
         return;
       }
 
+      // ロボット状態の更新とチェック
       refresh_map_obstacle_cache(robot_state_->position);
 
       // ゴールのチェック
       if (!has_valid_goal()) {
         return;
-      }
-
-      if (field_update_pending_) {
-        try_recompute_static_field();
       }
 
       // 目標到達チェック

@@ -31,7 +31,9 @@ namespace tvvf_vo_c
 
     // パブリッシャー初期化
     cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel_raw", 10);
-    vector_field_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("tvvf_vo_vector_field", 10);
+    auto pose_qos = rclcpp::QoS(10);
+    pose_qos.best_effort();
+    vector_field_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>("tvvf_vo_vector_pose_array", pose_qos);
     planned_path_pub_ = this->create_publisher<nav_msgs::msg::Path>("planned_path", 10);
     goal_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("goal_marker", 10);
     cmd_velocity_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("cmd_vel_marker", 10);
@@ -159,12 +161,11 @@ namespace tvvf_vo_c
     }
 
     if (!robot_state_.has_value()) {
-      if (!update_robot_state()) {
-        return false;
-      }
+      // ロボット姿勢が取得できなくても全域で計算する
+      update_robot_state();
     }
 
-    auto region = build_planning_region();
+    auto region = robot_state_.has_value() ? build_planning_region() : std::optional<FieldRegion>{std::nullopt};
 
     try {
       global_field_generator_->precomputeStaticField(

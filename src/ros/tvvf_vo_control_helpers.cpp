@@ -81,10 +81,6 @@ namespace tvvf_vo_c
 
   void TVVFVONode::update_visualization()
   {
-    if (this->count_subscribers("tvvf_vo_vector_field") == 0) {
-      return;
-    }
-
     const auto now = this->get_clock()->now();
     if (!is_vector_field_publish_due(now)) {
       return;
