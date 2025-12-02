@@ -52,9 +52,17 @@ namespace tvvf_vo_c
         mask_topic, mask_qos,
         std::bind(&TVVFVONode::obstacle_mask_callback, this, std::placeholders::_1));
 
-    // タイマー初期化（制御ループ：20Hz）
+    // タイマー初期化（制御ループレートはパラメータ化）
+    double control_rate_hz = this->get_parameter("control_loop_rate").as_double();
+    if (control_rate_hz <= 0.0) {
+      RCLCPP_WARN(this->get_logger(),
+                  "control_loop_rate <= 0 specified (%.3f). Using 20 Hz fallback.",
+                  control_rate_hz);
+      control_rate_hz = 20.0;
+    }
+    auto control_period = std::chrono::duration<double>(1.0 / control_rate_hz);
     control_timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(50), std::bind(&TVVFVONode::control_loop, this));
+        control_period, std::bind(&TVVFVONode::control_loop, this));
 
   }
 
@@ -79,6 +87,7 @@ namespace tvvf_vo_c
     this->declare_parameter("turning_linear_scale", 0.3);
     this->declare_parameter("turning_angular_gain", 2.0);
     this->declare_parameter("tracking_angular_gain", 1.0);
+    this->declare_parameter("control_loop_rate", 20.0);
 
     // コストマップ関連
     this->declare_parameter("costmap_occupied_threshold", 50.0);

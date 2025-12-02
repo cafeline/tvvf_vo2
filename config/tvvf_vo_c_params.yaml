@@ -18,6 +18,7 @@ tvvf_vo_c_node:
     turning_linear_scale: 0.3
     turning_angular_gain: 2.0
     tracking_angular_gain: 1.0
+    control_loop_rate: 20.0  # [Hz]
 
     # コストマップ
     costmap_occupied_threshold: 50.0
