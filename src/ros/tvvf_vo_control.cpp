@@ -13,6 +13,7 @@ namespace tvvf_vo_c
       const bool robot_ok = update_robot_state();
 
       if (!robot_ok) {
+        publish_stop_command();
         // ロボット姿勢が取れなくても可視化は進める
         update_visualization();
         return;
@@ -23,6 +24,7 @@ namespace tvvf_vo_c
 
       // ゴールのチェック
       if (!has_valid_goal()) {
+        publish_stop_command();
         return;
       }
 
