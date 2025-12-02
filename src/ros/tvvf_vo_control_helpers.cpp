@@ -1,5 +1,6 @@
 #include "tvvf_vo_c/ros/tvvf_vo_node.hpp"
 #include <cmath>
+#include <chrono>
 
 namespace tvvf_vo_c
 {
@@ -38,29 +39,84 @@ namespace tvvf_vo_c
 
   ControlOutput TVVFVONode::compute_control_output()
   {
+    const auto t_start = std::chrono::steady_clock::now();
+    auto t_after_map = t_start;
+    auto t_after_field = t_start;
+    auto t_after_cmd = t_start;
+
+    auto log_timing = [&](const char* reason, bool has_map, bool has_field, bool has_cmd) {
+      if (!has_map) {
+        t_after_map = std::chrono::steady_clock::now();
+      }
+      if (!has_field) {
+        t_after_field = t_after_map;
+      }
+      if (!has_cmd) {
+        t_after_cmd = std::chrono::steady_clock::now();
+      }
+
+      const double ms_map = std::chrono::duration<double, std::milli>(t_after_map - t_start).count();
+      const double ms_field = std::chrono::duration<double, std::milli>(t_after_field - t_after_map).count();
+      const double ms_cmd = std::chrono::duration<double, std::milli>(t_after_cmd - t_after_field).count();
+      const double ms_total = std::chrono::duration<double, std::milli>(t_after_cmd - t_start).count();
+      const double field_report_ms = global_field_generator_
+          ? global_field_generator_->getLastComputationTime() * 1000.0
+          : 0.0;
+
+      timing_total_ms_window_.push_back(ms_total);
+      if (timing_total_ms_window_.size() > 100) {
+        timing_total_ms_window_.pop_front();
+      }
+      const size_t n = timing_total_ms_window_.size();
+      double mean = 0.0;
+      double variance = 0.0;
+      if (n > 0) {
+        const double sum = std::accumulate(timing_total_ms_window_.begin(), timing_total_ms_window_.end(), 0.0);
+        mean = sum / static_cast<double>(n);
+        double accum = 0.0;
+        for (double v : timing_total_ms_window_) {
+          const double diff = v - mean;
+          accum += diff * diff;
+        }
+        variance = (n > 1) ? accum / static_cast<double>(n - 1) : 0.0;
+      }
+      const double stddev = std::sqrt(variance);
+
+      RCLCPP_INFO(
+          this->get_logger(),
+          "timing_ms: map=%.2f field=%.2f (report=%.2f) cmd=%.2f total=%.2f reason=%s window(n=%zu) mean=%.2f std=%.2f",
+          ms_map, ms_field, field_report_ms, ms_cmd, ms_total, reason,
+          n, mean, stddev);
+    };
+
     if (!global_field_generator_ || !current_map_.has_value() || !goal_.has_value()) {
       latest_field_.reset();
       RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                           "Map/goal not ready - stopping");
+      log_timing("map_or_goal_missing", false, false, false);
       return ControlOutput(Velocity(0.0, 0.0), 0.01, 0.01, 0.0);
     }
 
     auto map_to_use = build_combined_map();
+    t_after_map = std::chrono::steady_clock::now();
     if (!map_to_use.has_value()) {
       latest_field_.reset();
       RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                           "Combined map unavailable - stopping");
+      log_timing("combined_map_unavailable", false, false, false);
       return ControlOutput(Velocity(0.0, 0.0), 0.01, 0.01, 0.0);
     }
 
     auto region = build_planning_region();
     latest_field_ = global_field_generator_->computeFieldOnTheFly(
         map_to_use.value(), goal_->position, region);
+    t_after_field = std::chrono::steady_clock::now();
 
     if (!latest_field_.has_value() || latest_field_->width == 0 || latest_field_->height == 0) {
       latest_field_.reset();
       RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                           "Vector field generation failed - stopping");
+      log_timing("field_generation_failed", true, false, false);
       return ControlOutput(Velocity(0.0, 0.0), 0.01, 0.01, 0.0);
     }
 
@@ -108,6 +164,9 @@ namespace tvvf_vo_c
       optimized_velocity = velocity_optimizer_->computeOptimalVelocity(opt_state);
     }
     previous_velocity_command_ = optimized_velocity;
+
+    t_after_cmd = std::chrono::steady_clock::now();
+    log_timing("ok", true, true, true);
 
     return ControlOutput(
         optimized_velocity,

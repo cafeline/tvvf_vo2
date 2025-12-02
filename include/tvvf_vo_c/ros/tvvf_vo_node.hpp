@@ -21,6 +21,8 @@
 #include <vector>
 #include <optional>
 #include <string>
+#include <deque>
+#include <numeric>
 
 namespace tvvf_vo_c {
 
@@ -45,6 +47,7 @@ private:
     std::optional<Velocity> previous_velocity_command_;
     std::string base_frame_;
     int cmd_velocity_marker_seq_{0};
+    std::deque<double> timing_total_ms_window_;
 
     // 状態変数
     std::optional<RobotState> robot_state_;
