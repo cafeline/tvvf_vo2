@@ -45,3 +45,16 @@ TEST_F(CostMapBuilderTest, AdjustsSpeedBasedOnDistance) {
     EXPECT_LT(speed_near, speed_far);
     EXPECT_DOUBLE_EQ(result.speedAt(2, 2), 0.0);
 }
+
+TEST_F(CostMapBuilderTest, ReusesAllocatedBuffersWhenSizeIsStable) {
+    CostMapResult reusable;
+    builder.build(map, reusable);
+    auto* speed_ptr = reusable.speed_layer.data();
+    auto* clearance_ptr = reusable.clearance_layer.data();
+
+    builder.build(map, reusable);
+
+    EXPECT_EQ(speed_ptr, reusable.speed_layer.data());
+    EXPECT_EQ(clearance_ptr, reusable.clearance_layer.data());
+    ASSERT_TRUE(reusable.isValid());
+}

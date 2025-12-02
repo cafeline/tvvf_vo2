@@ -134,3 +134,14 @@ TEST_F(FastMarchingTest, PerformanceTest) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     EXPECT_LT(duration.count(), 50);
 }
+
+TEST_F(FastMarchingTest, ReusesInternalBuffersWhenSizeUnchanged) {
+    fmm.initializeFromOccupancyGrid(test_map);
+    const auto& field = fmm.getField();
+    auto* first_cell_ptr = &field.grid[0][0];
+
+    fmm.initializeFromOccupancyGrid(test_map);
+    const auto& field_after = fmm.getField();
+
+    EXPECT_EQ(first_cell_ptr, &field_after.grid[0][0]);
+}

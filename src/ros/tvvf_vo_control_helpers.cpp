@@ -24,8 +24,9 @@ namespace tvvf_vo_c
     if (!robot_state_.has_value() || !goal_.has_value()) {
       return false;
     }
-    const double distance_to_goal = robot_state_->position.distance_to(goal_->position);
-    return distance_to_goal < goal_->tolerance;
+    const double dist_sq = robot_state_->position.squared_distance_to(goal_->position);
+    const double tol_sq = goal_->tolerance * goal_->tolerance;
+    return dist_sq < tol_sq;
   }
 
   void TVVFVONode::handle_goal_reached()
@@ -127,7 +128,7 @@ namespace tvvf_vo_c
       if (cost_map.has_value()) {
         const std::string frame_id = current_map_.has_value()
             ? current_map_->header.frame_id
-            : this->get_parameter("global_frame").as_string();
+            : cached_params_.global_frame;
         publish_costmap_visualization(*cost_map, *latest_field_, frame_id);
       }
     }
@@ -144,8 +145,7 @@ namespace tvvf_vo_c
     }
 
     nav_msgs::msg::OccupancyGrid merged = *current_map_;
-    const double clear_radius = std::max(
-      0.0, this->get_parameter("occupancy_clear_radius").as_double());
+    const double clear_radius = std::max(0.0, cached_params_.occupancy_clear_radius);
     const bool has_robot_state = robot_state_.has_value();
     const double clear_r2 = clear_radius * clear_radius;
 
@@ -172,7 +172,7 @@ namespace tvvf_vo_c
 
     // 2) マスク適用
     if (!obstacle_mask_.has_value()) {
-      const double override_res = this->get_parameter("costmap_resolution").as_double();
+      const double override_res = cached_params_.costmap_resolution;
       if (override_res > 1e-6 &&
         std::abs(override_res - merged.info.resolution) > 1e-6)
       {
@@ -236,7 +236,7 @@ namespace tvvf_vo_c
     }
 
     // 3) 解像度変更（最後にまとめて）
-    const double override_res = this->get_parameter("costmap_resolution").as_double();
+    const double override_res = cached_params_.costmap_resolution;
     if (override_res > 1e-6 &&
       std::abs(override_res - merged.info.resolution) > 1e-6)
     {

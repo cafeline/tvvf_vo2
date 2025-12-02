@@ -38,20 +38,31 @@ inline bool is_obstacle_cell(int8_t occupancy,
 CostMapBuilder::CostMapBuilder(const CostMapSettings& settings)
     : settings_(settings) {}
 
-CostMapResult CostMapBuilder::build(const nav_msgs::msg::OccupancyGrid& map) const {
-    CostMapResult result;
+void CostMapBuilder::build(const nav_msgs::msg::OccupancyGrid& map,
+                           CostMapResult& result) const {
     result.width = map.info.width;
     result.height = map.info.height;
     result.resolution = map.info.resolution;
 
     if (result.width == 0 || result.height == 0) {
-        return result;
+        result.speed_layer.clear();
+        result.clearance_layer.clear();
+        return;
     }
 
     const size_t cell_count = static_cast<size_t>(result.width) * result.height;
-    result.speed_layer.assign(cell_count, settings_.max_speed);
-    result.clearance_layer.assign(cell_count, std::numeric_limits<double>::infinity());
-    std::vector<bool> obstacle_mask(cell_count, false);
+    if (result.speed_layer.size() != cell_count) {
+        result.speed_layer.resize(cell_count);
+    }
+    if (result.clearance_layer.size() != cell_count) {
+        result.clearance_layer.resize(cell_count);
+    }
+    if (obstacle_mask_buffer_.size() != cell_count) {
+        obstacle_mask_buffer_.resize(cell_count);
+    }
+    std::fill(result.speed_layer.begin(), result.speed_layer.end(), settings_.max_speed);
+    std::fill(result.clearance_layer.begin(), result.clearance_layer.end(), std::numeric_limits<double>::infinity());
+    std::fill(obstacle_mask_buffer_.begin(), obstacle_mask_buffer_.end(), false);
 
     const double resolution = std::max(result.resolution, 1e-6);
     const double orthogonal_step = resolution;
@@ -64,7 +75,7 @@ CostMapResult CostMapBuilder::build(const nav_msgs::msg::OccupancyGrid& map) con
             const size_t index = static_cast<size_t>(y) * result.width + x;
             const int8_t occupancy = map.data[index];
             if (is_obstacle_cell(occupancy, settings_.occupied_threshold, settings_.free_threshold)) {
-                obstacle_mask[index] = true;
+                obstacle_mask_buffer_[index] = true;
                 result.clearance_layer[index] = 0.0;
                 queue.push(QueueNode{0.0, static_cast<int>(x), static_cast<int>(y)});
             }
@@ -98,7 +109,7 @@ CostMapResult CostMapBuilder::build(const nav_msgs::msg::OccupancyGrid& map) con
                 }
 
                 const size_t neighbor_index = static_cast<size_t>(ny) * result.width + nx;
-                if (obstacle_mask[neighbor_index]) {
+                if (obstacle_mask_buffer_[neighbor_index]) {
                     continue;
                 }
 
@@ -119,7 +130,7 @@ CostMapResult CostMapBuilder::build(const nav_msgs::msg::OccupancyGrid& map) con
     const double max_speed = std::max(settings_.max_speed, min_speed);
 
     for (size_t idx = 0; idx < cell_count; ++idx) {
-        if (obstacle_mask[idx]) {
+        if (obstacle_mask_buffer_[idx]) {
             result.speed_layer[idx] = 0.0;
             continue;
         }
@@ -141,7 +152,11 @@ CostMapResult CostMapBuilder::build(const nav_msgs::msg::OccupancyGrid& map) con
         raw_speed = std::clamp(raw_speed, min_speed, max_speed);
         result.speed_layer[idx] = raw_speed;
     }
+}
 
+CostMapResult CostMapBuilder::build(const nav_msgs::msg::OccupancyGrid& map) const {
+    CostMapResult result;
+    build(map, result);
     return result;
 }
 

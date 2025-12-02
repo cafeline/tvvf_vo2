@@ -8,6 +8,8 @@
 #include <limits>
 #include <optional>
 #include "tvvf_vo_c/core/types.hpp"  // Position, Velocity, DynamicObstacleをtypes.hppから使用
+#include <cstddef>
+#include <algorithm>
 
 namespace tvvf_vo_c {
 
@@ -50,6 +52,19 @@ struct FieldRegion {
     }
 };
 
+// 1次元ストレージへの軽量ビュー
+struct GridRowView {
+    GridCell* data{nullptr};
+    GridCell& operator[](size_t idx) { return data[idx]; }
+    const GridCell& operator[](size_t idx) const { return data[idx]; }
+};
+
+struct VectorRowView {
+    std::array<double, 2>* data{nullptr};
+    std::array<double, 2>& operator[](size_t idx) { return data[idx]; }
+    const std::array<double, 2>& operator[](size_t idx) const { return data[idx]; }
+};
+
 // ベクトル場全体
 class VectorField {
 public:
@@ -57,18 +72,22 @@ public:
     double resolution;           // セル解像度[m]
     Position origin;             // 原点位置
     std::optional<FieldRegion> region;  // 計算対象領域
-    std::vector<std::vector<GridCell>> grid;  // 2Dグリッド
-    std::vector<std::vector<std::array<double, 2>>> vectors;  // ベクトル場
+    std::vector<GridRowView> grid;  // 2Dビュー（実体は1次元ストレージ）
+    std::vector<VectorRowView> vectors;  // ベクトル場ビュー
     
-    VectorField() : width(0), height(0), resolution(1.0) {}
+    VectorField();
+    VectorField(const VectorField& other);
+    VectorField(VectorField&& other) noexcept;
+    VectorField& operator=(const VectorField& other);
+    VectorField& operator=(VectorField&& other) noexcept;
     
     // グリッド座標⇔ワールド座標変換
     GridCell& at(int x, int y) {
-        return grid[y][x];
+        return grid[static_cast<size_t>(y)][static_cast<size_t>(x)];
     }
     
     const GridCell& at(int x, int y) const {
-        return grid[y][x];
+        return grid[static_cast<size_t>(y)][static_cast<size_t>(x)];
     }
     
     Position gridToWorld(int x, int y) const {
@@ -87,11 +106,107 @@ public:
     std::array<double, 2> getVector(const Position& pos) const {
         auto [x, y] = worldToGrid(pos);
         if (x >= 0 && x < width && y >= 0 && y < height) {
-            return vectors[y][x];
+            return vectors[static_cast<size_t>(y)][static_cast<size_t>(x)];
         }
         return {0.0, 0.0};
     }
+
+    void resize(int new_width, int new_height);
+    void set_origin(const Position& new_origin) { origin = new_origin; }
+
+private:
+    std::vector<GridCell> grid_storage_;
+    std::vector<std::array<double, 2>> vector_storage_;
+
+    void rebuild_row_views();
 };
+
+inline VectorField::VectorField()
+    : width(0), height(0), resolution(1.0), origin(0.0, 0.0) {}
+
+inline VectorField::VectorField(const VectorField& other)
+    : width(other.width),
+      height(other.height),
+      resolution(other.resolution),
+      origin(other.origin),
+      region(other.region),
+      grid_storage_(other.grid_storage_),
+      vector_storage_(other.vector_storage_) {
+    rebuild_row_views();
+}
+
+inline VectorField::VectorField(VectorField&& other) noexcept
+    : width(other.width),
+      height(other.height),
+      resolution(other.resolution),
+      origin(other.origin),
+      region(std::move(other.region)),
+      grid_storage_(std::move(other.grid_storage_)),
+      vector_storage_(std::move(other.vector_storage_)) {
+    rebuild_row_views();
+}
+
+inline VectorField& VectorField::operator=(const VectorField& other) {
+    if (this != &other) {
+        width = other.width;
+        height = other.height;
+        resolution = other.resolution;
+        origin = other.origin;
+        region = other.region;
+        grid_storage_ = other.grid_storage_;
+        vector_storage_ = other.vector_storage_;
+        rebuild_row_views();
+    }
+    return *this;
+}
+
+inline VectorField& VectorField::operator=(VectorField&& other) noexcept {
+    if (this != &other) {
+        width = other.width;
+        height = other.height;
+        resolution = other.resolution;
+        origin = other.origin;
+        region = std::move(other.region);
+        grid_storage_ = std::move(other.grid_storage_);
+        vector_storage_ = std::move(other.vector_storage_);
+        rebuild_row_views();
+    }
+    return *this;
+}
+
+inline void VectorField::resize(int new_width, int new_height) {
+    width = new_width;
+    height = new_height;
+    const size_t cell_count =
+        static_cast<size_t>(std::max(new_width, 0)) *
+        static_cast<size_t>(std::max(new_height, 0));
+    grid_storage_.resize(cell_count);
+    vector_storage_.resize(cell_count);
+    rebuild_row_views();
+}
+
+inline void VectorField::rebuild_row_views() {
+    grid.resize(static_cast<size_t>(std::max(height, 0)));
+    vectors.resize(static_cast<size_t>(std::max(height, 0)));
+
+    if (width <= 0 || height <= 0 || grid_storage_.empty() || vector_storage_.empty()) {
+        for (auto& row : grid) {
+            row.data = nullptr;
+        }
+        for (auto& row : vectors) {
+            row.data = nullptr;
+        }
+        return;
+    }
+
+    GridCell* grid_ptr = grid_storage_.data();
+    auto* vector_ptr = vector_storage_.data();
+    for (int y = 0; y < height; ++y) {
+        const size_t offset = static_cast<size_t>(y) * static_cast<size_t>(width);
+        grid[static_cast<size_t>(y)].data = grid_ptr + offset;
+        vectors[static_cast<size_t>(y)].data = vector_ptr + offset;
+    }
+}
 
 }  // namespace tvvf_vo_c
 

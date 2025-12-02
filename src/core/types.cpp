@@ -11,6 +11,12 @@ double Position::distance_to(const Position& other) const {
     return std::sqrt(dx * dx + dy * dy);
 }
 
+double Position::squared_distance_to(const Position& other) const {
+    double dx = x - other.x;
+    double dy = y - other.y;
+    return dx * dx + dy * dy;
+}
+
 Position Position::operator+(const Position& other) const {
     return Position(x + other.x, y + other.y);
 }

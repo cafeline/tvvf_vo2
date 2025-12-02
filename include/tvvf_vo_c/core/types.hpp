@@ -18,6 +18,7 @@ struct Position {
     Position(double x, double y) : x(x), y(y) {}
     
     double distance_to(const Position& other) const;
+    double squared_distance_to(const Position& other) const;
     Position operator+(const Position& other) const;
     Position operator-(const Position& other) const;
     Position operator*(double scalar) const;

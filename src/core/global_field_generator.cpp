@@ -116,13 +116,15 @@ void GlobalFieldGenerator::precomputeStaticField(const nav_msgs::msg::OccupancyG
         }
     }
 
-    auto cost_map = cost_map_builder_.build(*map_ptr);
-    if (!cost_map.isValid()) {
+    if (!last_cost_map_result_) {
+        last_cost_map_result_.emplace();
+    }
+    cost_map_builder_.build(*map_ptr, *last_cost_map_result_);
+    if (!last_cost_map_result_->isValid()) {
+        last_cost_map_result_.reset();
         static_field_computed_ = false;
         return;
     }
-
-    last_cost_map_result_ = cost_map;
 
     // Fast Marching Methodを使用して静的場を計算
     fast_marching_->initializeFromOccupancyGrid(*map_ptr, last_cost_map_result_->speed_layer);
@@ -159,15 +161,17 @@ VectorField GlobalFieldGenerator::computeFieldOnTheFly(
         return VectorField();
     }
 
-    auto cost_map = cost_map_builder_.build(*map_ptr);
-    if (!cost_map.isValid()) {
+    if (!last_cost_map_result_) {
+        last_cost_map_result_.emplace();
+    }
+    cost_map_builder_.build(*map_ptr, *last_cost_map_result_);
+    if (!last_cost_map_result_->isValid()) {
+        last_cost_map_result_.reset();
         static_field_computed_ = false;
         return VectorField();
     }
 
-    last_cost_map_result_ = cost_map;
-
-    fast_marching_->initializeFromOccupancyGrid(*map_ptr, cost_map.speed_layer);
+    fast_marching_->initializeFromOccupancyGrid(*map_ptr, last_cost_map_result_->speed_layer);
     fast_marching_->computeDistanceField(goal);
     fast_marching_->generateVectorField();
 
