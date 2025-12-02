@@ -148,6 +148,49 @@ namespace tvvf_vo_c
     return build_costmap_grid(cost_map, field, frame_id);
   }
 
+  nav_msgs::msg::OccupancyGrid TVVFVONode::resample_occupancy_grid(
+      const nav_msgs::msg::OccupancyGrid& src,
+      double new_resolution) const
+  {
+    nav_msgs::msg::OccupancyGrid out = src;
+    if (new_resolution <= 0.0 || std::abs(new_resolution - src.info.resolution) < 1e-9) {
+      return out;
+    }
+
+    const double size_x = static_cast<double>(src.info.width) * src.info.resolution;
+    const double size_y = static_cast<double>(src.info.height) * src.info.resolution;
+    const uint32_t new_width = static_cast<uint32_t>(std::ceil(size_x / new_resolution));
+    const uint32_t new_height = static_cast<uint32_t>(std::ceil(size_y / new_resolution));
+
+    out.info.resolution = new_resolution;
+    out.info.width = new_width;
+    out.info.height = new_height;
+    out.data.assign(static_cast<size_t>(new_width) * new_height, -1);
+
+    const double origin_x = src.info.origin.position.x;
+    const double origin_y = src.info.origin.position.y;
+    const double src_res = src.info.resolution;
+
+    for (uint32_t row = 0; row < new_height; ++row) {
+      for (uint32_t col = 0; col < new_width; ++col) {
+        const double wx = origin_x + (static_cast<double>(col) + 0.5) * new_resolution;
+        const double wy = origin_y + (static_cast<double>(row) + 0.5) * new_resolution;
+        const int src_col = static_cast<int>(std::floor((wx - origin_x) / src_res));
+        const int src_row = static_cast<int>(std::floor((wy - origin_y) / src_res));
+        if (src_col < 0 || src_row < 0 ||
+            src_col >= static_cast<int>(src.info.width) ||
+            src_row >= static_cast<int>(src.info.height)) {
+          continue;
+        }
+        const size_t src_idx =
+          static_cast<size_t>(src_row) * src.info.width + static_cast<size_t>(src_col);
+        out.data[static_cast<size_t>(row) * new_width + static_cast<size_t>(col)] =
+          src.data[src_idx];
+      }
+    }
+    return out;
+  }
+
   // ヘルパー関数: ベクトルを可視化すべきか判定
   bool TVVFVONode::should_visualize_vector(const std::array<double, 2>& vector) const
   {

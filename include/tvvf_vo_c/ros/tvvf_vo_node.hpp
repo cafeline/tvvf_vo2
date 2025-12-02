@@ -200,6 +200,9 @@ private:
         const CostMapResult& cost_map,
         const VectorField& field,
         const std::string& frame_id) const;
+    nav_msgs::msg::OccupancyGrid resample_occupancy_grid(
+        const nav_msgs::msg::OccupancyGrid& src,
+        double new_resolution) const;
     void publish_costmap_visualization(
         const CostMapResult& cost_map,
         const VectorField& field,

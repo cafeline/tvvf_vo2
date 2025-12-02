@@ -73,8 +73,8 @@ public:
     
     Position gridToWorld(int x, int y) const {
         return Position(
-            origin.x + x * resolution,
-            origin.y + y * resolution
+            origin.x + (static_cast<double>(x) + 0.5) * resolution,
+            origin.y + (static_cast<double>(y) + 0.5) * resolution
         );
     }
     

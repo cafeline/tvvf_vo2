@@ -50,7 +50,7 @@ TEST_F(GlobalFieldGeneratorTest, PrecomputeStaticField) {
     
     // Then: 静的場が計算されていること
     // フィールドが生成されて、サイズが正しいことを確認
-    auto field = generator.generateField({});
+    auto field = generator.computeFieldOnTheFly(test_map, goal, std::nullopt);
     EXPECT_EQ(field.width, 20);
     EXPECT_EQ(field.height, 20);
 }
@@ -70,7 +70,7 @@ TEST_F(GlobalFieldGeneratorTest, CropsStaticFieldToRegion) {
     FieldRegion region(Position(2.0, 3.0), Position(6.0, 7.0));
 
     generator.precomputeStaticField(test_map, goal, region);
-    auto field = generator.generateField({});
+    auto field = generator.computeFieldOnTheFly(test_map, goal, region);
 
     EXPECT_EQ(field.width, 8);   // (6-2)/0.5 = 8 cells
     EXPECT_EQ(field.height, 8);  // (7-3)/0.5 = 8 cells
@@ -82,91 +82,6 @@ TEST_F(GlobalFieldGeneratorTest, CropsStaticFieldToRegion) {
     EXPECT_TRUE(field.region->contains(Position(4.0, 4.0)));
 }
 
-// TEST 2: 動的障害物なしの場合
-TEST_F(GlobalFieldGeneratorTest, NoDynamicObstacles) {
-    // Given: 静的場が計算済み、動的障害物なし
-    Position goal(8.0, 8.0);
-    generator.precomputeStaticField(test_map, goal);
-    std::vector<DynamicObstacle> obstacles;
-    
-    // When: 動的障害物を含むフィールドを生成
-    auto field = generator.generateField(obstacles);
-    
-    // Then: フィールドが生成されていること（空の実装なので常に失敗する）
-    // Red Phase: このテストは失敗することが期待される
-    EXPECT_NE(field.width, 0) << "Field should be generated";
-    EXPECT_NE(field.height, 0) << "Field should be generated";
-}
-
-// TEST 3: 単一動的障害物の斥力テスト
-TEST_F(GlobalFieldGeneratorTest, SingleDynamicObstacle) {
-    // Given: 静的場と1つの動的障害物
-    Position goal(8.0, 8.0);
-    generator.precomputeStaticField(test_map, goal);
-    
-    // 障害物: 位置(5,4), 速度(0,0), 半径0.5m
-    DynamicObstacle obstacle(Position(5.0, 4.0), Velocity(0, 0), 0.5);
-    std::vector<DynamicObstacle> obstacles = {obstacle};
-    
-    // When: フィールドを生成
-    auto field = generator.generateField(obstacles);
-    
-    // Then: フィールドが生成されていること（空の実装なので常に失敗する）
-    // Red Phase: このテストは失敗することが期待される
-    EXPECT_NE(field.width, 0) << "Field should handle dynamic obstacles";
-    EXPECT_NE(field.height, 0) << "Field should handle dynamic obstacles";
-}
-
-// TEST 4: 複数動的障害物の統合テスト
-TEST_F(GlobalFieldGeneratorTest, MultipleDynamicObstacles) {
-    // Given: 複数の動的障害物
-    Position goal(10.0, 10.0);
-    generator.precomputeStaticField(test_map, goal);
-    
-    std::vector<DynamicObstacle> obstacles = {
-        DynamicObstacle(Position(6.0, 5.0), Velocity(0, 0), 0.5),
-        DynamicObstacle(Position(5.0, 6.0), Velocity(0, 0), 0.5)
-    };
-    
-    // When: 動的ベクトルを計算
-    auto field = generator.generateField(obstacles);
-    
-    // Then: フィールドが適切に生成される（空の実装なので失敗する）
-    // Red Phase: このテストは失敗することが期待される
-    EXPECT_NE(field.width, 0) << "Field should handle multiple obstacles";
-    EXPECT_NE(field.height, 0) << "Field should handle multiple obstacles";
-}
-
-// TEST 5: リアルタイム性能テスト
-TEST_F(GlobalFieldGeneratorTest, RealtimePerformance) {
-    // Given: 事前計算済みの静的場と多数の動的障害物
-    Position goal(10.0, 10.0);
-    generator.precomputeStaticField(test_map, goal);
-    
-    std::vector<DynamicObstacle> obstacles;
-    for (int i = 0; i < 10; i++) {
-        obstacles.push_back(
-            DynamicObstacle(
-                Position(i * 1.0, i * 1.0), 
-                Velocity(0.1, 0.1), 
-                0.3)
-        );
-    }
-    
-    // When: 100回フィールド生成を実行
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 100; i++) {
-        generator.generateField(obstacles);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    
-    // Then: 平均計算時間が10ms以下
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    double avg_time_ms = duration.count() / 100.0 / 1000.0;
-    // Red Phase: 空の実装なので非常に高速に実行されるため、このテストはパスする可能性がある
-    EXPECT_LT(avg_time_ms, 10.0);
-}
-
 TEST_F(GlobalFieldGeneratorTest, EndToEndGradientGuidanceAvoidsWall) {
     test_map.data.assign(test_map.data.size(), 0);
 
@@ -174,14 +89,13 @@ TEST_F(GlobalFieldGeneratorTest, EndToEndGradientGuidanceAvoidsWall) {
     generator.precomputeStaticField(test_map, goal);
 
     Position pose(1.0, 1.0);
-    std::vector<DynamicObstacle> empty;
     bool reached = false;
     const double max_x = test_map.info.width * test_map.info.resolution;
     const double max_y = test_map.info.height * test_map.info.resolution;
 
     const double step_size = 0.05;
     for (int step = 0; step < 400; ++step) {
-        auto vec = generator.getVelocityAt(pose, empty);
+        auto vec = generator.getVelocityAt(pose);
         const double norm = std::sqrt(vec[0] * vec[0] + vec[1] * vec[1]);
         if (norm < 1e-4) {
             break;
@@ -202,7 +116,7 @@ TEST_F(GlobalFieldGeneratorTest, EndToEndGradientGuidanceAvoidsWall) {
     }
 }
 
-TEST_F(GlobalFieldGeneratorTest, ComputesFieldOnTheFlyWithDynamicObstacleStamped) {
+TEST_F(GlobalFieldGeneratorTest, ComputesFieldOnTheFlyFromOccupancyGrid) {
     // マップは10x10m、解像度1.0mの自由空間
     nav_msgs::msg::OccupancyGrid map;
     map.info.width = 10;
@@ -215,12 +129,8 @@ TEST_F(GlobalFieldGeneratorTest, ComputesFieldOnTheFlyWithDynamicObstacleStamped
     // ゴールを設定（事前計算なし）
     Position goal(9.0, 5.0);
 
-    // 動的障害物を中央に配置し、1m半径でブロック
-    DynamicObstacle dyn(Position(5.0, 5.0), Velocity(0.0, 0.0), 1.0);
-    std::vector<DynamicObstacle> obstacles = {dyn};
-
-    // On-the-flyでベクトル場を生成
-    auto field = generator.computeFieldOnTheFly(map, goal, obstacles, std::nullopt);
+    // On-the-flyでベクトル場を生成（OccupancyGridのみ）
+    auto field = generator.computeFieldOnTheFly(map, goal, std::nullopt);
     ASSERT_GT(field.width, 0);
     ASSERT_GT(field.height, 0);
 
@@ -237,9 +147,6 @@ TEST_F(GlobalFieldGeneratorTest, ComputesFieldOnTheFlyWithDynamicObstacleStamped
         pose.x += vec[0] / norm * step_size;
         pose.y += vec[1] / norm * step_size;
 
-        // 障害物近傍に入っていないことを確認（動的障害物がOccupancyに刻まれている前提）
-        EXPECT_GT(std::hypot(pose.x - dyn.position.x, pose.y - dyn.position.y), dyn.radius - 1e-3);
-
         const double dist_goal = std::hypot(goal.x - pose.x, goal.y - pose.y);
         if (dist_goal < 0.5) {
             break;
@@ -248,41 +155,6 @@ TEST_F(GlobalFieldGeneratorTest, ComputesFieldOnTheFlyWithDynamicObstacleStamped
 
     EXPECT_LT(std::hypot(goal.x - pose.x, goal.y - pose.y), 1.5)
         << "final pose=(" << pose.x << ", " << pose.y << ")";
-}
-
-// TEST 6: ブレンディングのテスト
-TEST_F(GlobalFieldGeneratorTest, BlendingWithDynamicObstacles) {
-    // Given: 静的場が計算済み
-    Position goal(10.0, 10.0);
-    generator.precomputeStaticField(test_map, goal);
-    
-    // 空のフィールドを作成（テスト用）
-    VectorField static_field;
-    static_field.width = 20;
-    static_field.height = 20;
-    static_field.resolution = 0.5;
-    static_field.origin = Position(0, 0);
-    
-    // グリッドとベクトルを初期化
-    static_field.grid.resize(20);
-    static_field.vectors.resize(20);
-    for (int i = 0; i < 20; i++) {
-        static_field.grid[i].resize(20);
-        static_field.vectors[i].resize(20, {0.1, 0.1});  // 小さな初期ベクトル
-    }
-    
-    // 動的障害物を設定
-    std::vector<DynamicObstacle> obstacles = {
-        DynamicObstacle(Position(5.0, 5.0), Velocity(0, 0), 0.5)
-    };
-    
-    // When: ブレンディングを実行
-    auto blended_field = generator.blendWithDynamicObstacles(static_field, obstacles);
-    
-    // Then: ブレンドされたフィールドが生成される（空の実装なので失敗する）
-    // Red Phase: このテストは失敗することが期待される
-    EXPECT_NE(blended_field.width, 0) << "Blended field should be generated";
-    EXPECT_NE(blended_field.height, 0) << "Blended field should be generated";
 }
 
 // メイン関数

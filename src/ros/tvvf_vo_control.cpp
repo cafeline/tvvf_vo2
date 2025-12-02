@@ -86,22 +86,29 @@ namespace tvvf_vo_c
     // 現在の姿勢との角度差
     double angle_diff = math_utils::normalize_angle(target_angle - current_orientation);
 
-    // 固定の許容角度（簡略化）
-    const double orientation_tolerance = 0.2;
+    const double orientation_tolerance = this->get_parameter("orientation_tolerance").as_double();
+    const double turning_linear_scale = this->get_parameter("turning_linear_scale").as_double();
+    const double turning_angular_gain = this->get_parameter("turning_angular_gain").as_double();
+    const double tracking_angular_gain = this->get_parameter("tracking_angular_gain").as_double();
 
     // 角度差が大きい場合は回転を優先
     double linear_velocity, angular_velocity;
     if (std::abs(angle_diff) > orientation_tolerance)
     {
       // 回転優先モード
-      linear_velocity = target_speed * std::cos(angle_diff) * 0.3;
-      angular_velocity = 2.0 * angle_diff;
+      linear_velocity = target_speed * std::cos(angle_diff) * turning_linear_scale;
+      angular_velocity = turning_angular_gain * angle_diff;
     }
     else
     {
       // 前進優先モード
       linear_velocity = target_speed * std::cos(angle_diff);
-      angular_velocity = 1.0 * angle_diff;
+      angular_velocity = tracking_angular_gain * angle_diff;
+    }
+
+    // 旋回時の後進を防ぐため、線速度は非負にクリップ
+    if (linear_velocity < 0.0) {
+      linear_velocity = 0.0;
     }
 
     return {linear_velocity, angular_velocity};

@@ -75,6 +75,10 @@ namespace tvvf_vo_c
     this->declare_parameter("vector_field_path_width", 4.0);
     this->declare_parameter("obstacle_mask_topic", "/obstacle_mask");
     this->declare_parameter("occupancy_clear_radius", 0.3);
+    this->declare_parameter("orientation_tolerance", 0.2);
+    this->declare_parameter("turning_linear_scale", 0.3);
+    this->declare_parameter("turning_angular_gain", 2.0);
+    this->declare_parameter("tracking_angular_gain", 1.0);
 
     // 斥力パラメータ
     this->declare_parameter("costmap_occupied_threshold", 50.0);
@@ -84,11 +88,9 @@ namespace tvvf_vo_c
     this->declare_parameter("costmap_max_speed", 1.0);
     this->declare_parameter("costmap_clearance_epsilon", 0.1);
     this->declare_parameter("costmap_max_clearance", 5.0);
+    this->declare_parameter("costmap_resolution", 0.0);
     this->declare_parameter("optimizer_goal_weight", 1.0);
     this->declare_parameter("optimizer_smooth_weight", 4.0);
-    this->declare_parameter("optimizer_obstacle_weight", 2.0);
-    this->declare_parameter("optimizer_obstacle_influence_range", 1.5);
-    this->declare_parameter("optimizer_obstacle_safe_distance", 0.4);
     this->declare_parameter("optimizer_max_linear_acceleration", 0.5);
 
   }
@@ -117,11 +119,6 @@ namespace tvvf_vo_c
 
     config.goal_weight = std::max(0.0, this->get_parameter("optimizer_goal_weight").as_double());
     config.smooth_weight = std::max(0.0, this->get_parameter("optimizer_smooth_weight").as_double());
-    config.obstacle_weight = std::max(0.0, this->get_parameter("optimizer_obstacle_weight").as_double());
-    config.obstacle_influence_range =
-        std::max(0.1, this->get_parameter("optimizer_obstacle_influence_range").as_double());
-    config.obstacle_safe_distance =
-        std::max(0.05, this->get_parameter("optimizer_obstacle_safe_distance").as_double());
     config.max_linear_acceleration =
         std::max(0.01, this->get_parameter("optimizer_max_linear_acceleration").as_double());
 
@@ -155,9 +152,6 @@ namespace tvvf_vo_c
     OptimizationOptions options;
     options.goal_weight = config_.goal_weight;
     options.smooth_weight = config_.smooth_weight;
-    options.obstacle_weight = config_.obstacle_weight;
-    options.obstacle_influence_range = config_.obstacle_influence_range;
-    options.obstacle_safe_distance = config_.obstacle_safe_distance;
     options.max_linear_acceleration = config_.max_linear_acceleration;
     return options;
   }

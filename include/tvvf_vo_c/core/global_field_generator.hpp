@@ -30,22 +30,13 @@ public:
     // 毎フレームのオンデマンド生成（静的事前計算なし）
     VectorField computeFieldOnTheFly(const nav_msgs::msg::OccupancyGrid& map,
                                      const Position& goal,
-                                     const std::vector<DynamicObstacle>& obstacles,
                                      const std::optional<FieldRegion>& region = std::nullopt);
-    
-    // 動的障害物を考慮したベクトル場生成
-    VectorField generateField(const std::vector<DynamicObstacle>& obstacles);
-    
-    // 動的障害物の影響を計算
-    VectorField blendWithDynamicObstacles(const VectorField& static_field,
-                                           const std::vector<DynamicObstacle>& obstacles);
     
     // パフォーマンス計測用
     double getLastComputationTime() const;
     
     // ロボット位置での速度ベクトル取得
-    std::array<double, 2> getVelocityAt(const Position& position,
-                                         const std::vector<DynamicObstacle>& obstacles);
+    std::array<double, 2> getVelocityAt(const Position& position);
     
     // 静的場が計算済みかチェック
     bool isStaticFieldReady() const { return static_field_computed_; }
@@ -58,26 +49,6 @@ private:
     CostMapSettings cost_map_settings_;
     CostMapBuilder cost_map_builder_;
     std::optional<CostMapResult> last_cost_map_result_;
-    
-    // ヘルパー関数
-    std::array<double, 2> computeTotalRepulsiveForce(
-        const Position& position,
-        const std::vector<DynamicObstacle>& obstacles) const;
-    
-    std::array<double, 2> computeRepulsiveForceFromObstacle(
-        const Position& position,
-        const DynamicObstacle& obstacle) const;
-    
-    std::array<double, 2> blendAndNormalizeVectors(
-        const std::array<double, 2>& static_vector,
-        const std::array<double, 2>& dynamic_vector,
-        double blend_weight) const;
-    
-    std::array<double, 2> normalizeVector(
-        const std::array<double, 2>& vector) const;
-    
-    bool hasSignificantMagnitude(
-        const std::array<double, 2>& vector) const;
 };
 
 }  // namespace tvvf_vo_c

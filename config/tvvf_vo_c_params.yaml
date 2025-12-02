@@ -1,62 +1,38 @@
 tvvf_vo_c_node:
   ros__parameters:
-    # TVVF基本パラメータ
-    k_attraction: 1.0          # 引力場強度
-    k_repulsion: 2.0           # 斥力場強度
-    influence_radius: 3.0      # 障害物影響半径 [m]
-    
-    
-    # 経路統合パラメータ（ベクトル場統合用）
-    k_path_attraction: 2.0          # 経路追従引力強度
-    path_influence_radius: 2.0      # 経路影響半径 [m]
-    lookahead_distance: 1.5         # 先読み距離 [m]
-    
-    # 障害物回避関連パラメータ
-    safety_margin: 0.2        # 安全マージン [m]
-    
-    # ロボット仕様パラメータ
-    max_linear_velocity: 2.0     # 最大並進速度 [m/s]
-    max_angular_velocity: 2.0    # 最大角速度 [rad/s]
-    
-    # 予測関連パラメータ
-    prediction_dt: 0.1              # 予測時間刻み [s]
-    uncertainty_growth: 0.1         # 不確実性成長率
-    
-    # 最適化関連パラメータ
-    direction_weight: 1.0       # 方向重み
-    safety_weight: 2.0          # 安全重み
-    efficiency_weight: 0.5      # 効率重み
-    
-    # 数値安定性パラメータ
-    min_distance: 1.0e-6       # 最小距離制限
-    
-    # 性能関連パラメータ
-    max_computation_time: 0.05 # 最大計算時間 [s]
-    
-    # ロボット仕様パラメータ（差動二輪用）
-    max_linear_velocity: 2.0     # 最大並進速度 [m/s]
-    max_angular_velocity: 2.0    # 最大角速度 [rad/s]
-    max_acceleration: 1.0        # 最大加速度 [m/s²]
-    robot_radius: 0.3           # ロボット半径 [m]
-    wheel_base: 0.5             # ホイールベース [m]
-    orientation_tolerance: 0.2   # 姿勢許容誤差 [rad]
-    
-    # フレーム名
-    base_frame: "base_footprint"  # ロボットベースフレーム
-    global_frame: "map"          # グローバルフレーム
-    laser_frame: "lidar_link"    # レーザースキャナフレーム
-    
-    # 制御関連
-    goal_tolerance: 0.1         # ゴール許容誤差 [m]
-    vector_field_path_width: 4.0 # パス幅 [m]
-    
-    # 斥力パラメータ（静的障害物用）
-    # デバッグ・可視化
-    enable_visualization: true           # 可視化マーカーの有効化
-    enable_vector_field_viz: true        # ベクトル場可視化の有効化
-    vector_field_resolution: 0.5         # ベクトル場サンプリング解像度 [m]
-    vector_field_range: 4.0             # ベクトル場可視化範囲 [m]
-    vector_scale_factor: 0.3            # ベクトル矢印スケール係数
-    max_vector_points: 500              # 最大ベクトル点数
-    min_vector_magnitude: 0.05          # 表示最小ベクトル大きさ
-    viz_update_rate: 5.0                # 可視化更新レート [Hz]
+    use_sim_time: true
+
+    # ロボット仕様
+    max_linear_velocity: 2.0
+    max_angular_velocity: 2.0
+    robot_radius: 0.3
+
+    # フレーム
+    base_frame: "base_footprint"
+    global_frame: "map"
+
+    # 制御
+    goal_tolerance: 0.1
+    vector_field_path_width: 4.0
+    orientation_tolerance: 0.2
+    turning_linear_scale: 0.3
+    turning_angular_gain: 2.0
+    tracking_angular_gain: 1.0
+
+    # コストマップ
+    costmap_occupied_threshold: 50.0
+    costmap_free_threshold: 10.0
+    costmap_alpha: 1.0
+    costmap_min_speed: 0.05
+    costmap_max_speed: 1.0
+    costmap_clearance_epsilon: 0.1
+    costmap_max_clearance: 5.0
+
+    # オプティマイザ
+    optimizer_goal_weight: 1.0
+    optimizer_smooth_weight: 4.0
+    optimizer_max_linear_acceleration: 0.5
+
+    # 障害物マスク / クリアランス
+    obstacle_mask_topic: "/obstacle_mask"
+    occupancy_clear_radius: 0.3

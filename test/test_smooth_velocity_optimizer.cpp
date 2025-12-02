@@ -16,7 +16,6 @@ protected:
 TEST_F(SmoothVelocityOptimizerTest, FollowsDesiredWithoutObstacles) {
   options.goal_weight = 1.0;
   options.smooth_weight = 0.0;
-  options.obstacle_weight = 0.0;
   options.max_linear_acceleration = 10.0;
   optimizer.setOptions(options);
 

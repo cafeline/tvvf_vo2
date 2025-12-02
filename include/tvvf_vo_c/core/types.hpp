@@ -125,9 +125,6 @@ struct TVVFVOConfig {
     double max_angular_velocity;
     double goal_weight;
     double smooth_weight;
-    double obstacle_weight;
-    double obstacle_influence_range;
-    double obstacle_safe_distance;
     double max_linear_acceleration;
     
     TVVFVOConfig() 
@@ -135,9 +132,6 @@ struct TVVFVOConfig {
           max_angular_velocity(2.0),
           goal_weight(1.0),
           smooth_weight(4.0),
-          obstacle_weight(2.0),
-          obstacle_influence_range(1.0),
-          obstacle_safe_distance(0.4),
           max_linear_acceleration(0.5) {}
 };
 

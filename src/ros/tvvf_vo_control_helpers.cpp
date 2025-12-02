@@ -55,7 +55,7 @@ namespace tvvf_vo_c
 
     auto region = build_planning_region();
     latest_field_ = global_field_generator_->computeFieldOnTheFly(
-        map_to_use.value(), goal_->position, {}, region);
+        map_to_use.value(), goal_->position, region);
 
     if (!latest_field_.has_value() || latest_field_->width == 0 || latest_field_->height == 0) {
       latest_field_.reset();
@@ -155,6 +155,12 @@ namespace tvvf_vo_c
     }
 
     if (!obstacle_mask_.has_value()) {
+      const double override_res = this->get_parameter("costmap_resolution").as_double();
+      if (override_res > 1e-6 &&
+        std::abs(override_res - merged.info.resolution) > 1e-6)
+      {
+        merged = resample_occupancy_grid(merged, override_res);
+      }
       return merged;
     }
 
@@ -210,6 +216,13 @@ namespace tvvf_vo_c
           merged.data[idx_map] = 0;
         }
       }
+    }
+
+    const double override_res = this->get_parameter("costmap_resolution").as_double();
+    if (override_res > 1e-6 &&
+      std::abs(override_res - merged.info.resolution) > 1e-6)
+    {
+      merged = resample_occupancy_grid(merged, override_res);
     }
     return merged;
   }
