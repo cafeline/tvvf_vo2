@@ -2,12 +2,21 @@
 #include "tvvf_vo_c/utils/math_utils.hpp"
 #include <cmath>
 #include <algorithm>
+#include <chrono>
 
 namespace tvvf_vo_c
 {
 
   void TVVFVONode::control_loop()
   {
+    const auto start_time = this->now();
+    auto log_duration = [&](const char* reason) {
+      const double dt_ms = (this->now() - start_time).seconds() * 1000.0;
+      RCLCPP_INFO(
+          this->get_logger(),
+          "control_loop time: %.2f ms (%s)", dt_ms, reason);
+    };
+
     try
     {
       const bool robot_ok = update_robot_state();
@@ -16,6 +25,7 @@ namespace tvvf_vo_c
         publish_stop_command();
         // ロボット姿勢が取れなくても可視化は進める
         update_visualization();
+        log_duration("robot_pose_unavailable");
         return;
       }
 
@@ -25,24 +35,27 @@ namespace tvvf_vo_c
       // ゴールのチェック
       if (!has_valid_goal()) {
         publish_stop_command();
+        log_duration("goal_missing");
         return;
       }
 
       // 目標到達チェック
       if (is_goal_reached()) {
         handle_goal_reached();
+        log_duration("goal_reached");
         return;
       }
 
       // 制御出力を計算
       const auto control_output = compute_control_output();
-      
+
       // 可視化を更新
       update_visualization();
       publish_planned_path();
 
       // 制御コマンドを発行
       publish_control_command(control_output);
+      log_duration("ok");
     }
     catch (const std::exception &e)
     {
