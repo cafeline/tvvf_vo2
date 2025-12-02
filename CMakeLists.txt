@@ -38,7 +38,6 @@ add_library(${PROJECT_NAME}_core
   src/core/fast_marching.cpp
   src/core/global_field_generator.cpp
   src/core/smooth_velocity_optimizer.cpp
-  src/core/repulsive_force.cpp
   src/core/map_repulsion.cpp
   src/core/cost_map_builder.cpp
   src/ros/tvvf_vo_node.cpp

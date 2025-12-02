@@ -60,6 +60,26 @@ ament_target_dependencies(test_cost_map_builder
     Eigen3
 )
 
+# Cost Map Visualizationテスト
+ament_add_gtest(test_costmap_visualization
+    test_costmap_visualization.cpp
+)
+
+target_include_directories(test_costmap_visualization PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_costmap_visualization
+    ${PROJECT_NAME}_core
+)
+
+ament_target_dependencies(test_costmap_visualization
+    rclcpp
+    nav_msgs
+    geometry_msgs
+    Eigen3
+)
+
 # Global Field Generatorテスト
 ament_add_gtest(test_global_field_generator
     test_global_field_generator.cpp

@@ -49,7 +49,6 @@ private:
     // 状態変数
     std::optional<RobotState> robot_state_;
     std::optional<Goal> goal_;
-    std::vector<DynamicObstacle> dynamic_obstacles_;
     std::optional<nav_msgs::msg::OccupancyGrid> obstacle_mask_;
     std::optional<nav_msgs::msg::OccupancyGrid> current_map_;
     rclcpp::Time last_vector_field_publish_time_;
@@ -65,6 +64,7 @@ private:
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr planned_path_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr goal_marker_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr cmd_velocity_marker_pub_;
+    rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_pub_;
 
     // サブスクライバー
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
@@ -124,6 +124,10 @@ public:
     void debug_set_map(const nav_msgs::msg::OccupancyGrid & map) { current_map_ = map; }
     void debug_set_obstacle_mask(const nav_msgs::msg::OccupancyGrid & mask) { obstacle_mask_ = mask; }
     std::optional<nav_msgs::msg::OccupancyGrid> debug_build_combined_map() const { return build_combined_map(); }
+    nav_msgs::msg::OccupancyGrid debug_build_costmap_grid(
+        const CostMapResult& cost_map,
+        const VectorField& field,
+        const std::string& frame_id) const;
     void debug_set_robot_position(const Position & pos) {
       robot_state_ = RobotState(pos, Velocity(0.0, 0.0), 0.0, 0.0, 0.0, 0.0);
     }
@@ -192,6 +196,14 @@ private:
     std::array<double, 2> compute_navigation_vector(
         const std::array<double, 2>& base_vector,
         const Position& world_pos) const;
+    nav_msgs::msg::OccupancyGrid build_costmap_grid(
+        const CostMapResult& cost_map,
+        const VectorField& field,
+        const std::string& frame_id) const;
+    void publish_costmap_visualization(
+        const CostMapResult& cost_map,
+        const VectorField& field,
+        const std::string& frame_id);
 
     bool should_visualize_vector(const std::array<double, 2>& vector) const;
     bool is_valid_position(const Position& position) const;

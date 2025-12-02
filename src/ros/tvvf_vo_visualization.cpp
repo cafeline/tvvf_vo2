@@ -78,6 +78,76 @@ namespace tvvf_vo_c
     return base_vector;
   }
 
+  nav_msgs::msg::OccupancyGrid TVVFVONode::build_costmap_grid(
+      const CostMapResult& cost_map,
+      const VectorField& field,
+      const std::string& frame_id) const
+  {
+    nav_msgs::msg::OccupancyGrid grid;
+
+    if (!cost_map.isValid() || field.width <= 0 || field.height <= 0) {
+      return grid;
+    }
+
+    grid.header.frame_id = frame_id.empty()
+        ? this->get_parameter("global_frame").as_string()
+        : frame_id;
+    grid.header.stamp = this->now();
+
+    grid.info.width = cost_map.width;
+    grid.info.height = cost_map.height;
+    grid.info.resolution = cost_map.resolution;
+    grid.info.origin.position.x = field.origin.x;
+    grid.info.origin.position.y = field.origin.y;
+    grid.info.origin.orientation.w = 1.0;
+
+    grid.data.assign(static_cast<size_t>(grid.info.width) * grid.info.height, 0);
+
+    const double max_clearance = std::max(cost_map_settings_.max_clearance, 1e-6);
+    for (uint32_t y = 0; y < cost_map.height; ++y) {
+      for (uint32_t x = 0; x < cost_map.width; ++x) {
+        const size_t idx = static_cast<size_t>(y) * cost_map.width + x;
+        double clearance = cost_map.clearance_layer[idx];
+        if (!std::isfinite(clearance)) {
+          clearance = 0.0;
+        }
+        clearance = std::clamp(clearance, 0.0, max_clearance);
+        double normalized = 1.0 - (clearance / max_clearance);
+        int cost = static_cast<int>(std::lround(normalized * 100.0));
+        if (idx < cost_map.speed_layer.size() && cost_map.speed_layer[idx] <= 0.0) {
+          cost = 100;
+        }
+        cost = std::clamp(cost, 0, 100);
+        grid.data[idx] = static_cast<int8_t>(cost);
+      }
+    }
+
+    return grid;
+  }
+
+  void TVVFVONode::publish_costmap_visualization(
+      const CostMapResult& cost_map,
+      const VectorField& field,
+      const std::string& frame_id)
+  {
+    if (!costmap_pub_) {
+      return;
+    }
+    auto msg = build_costmap_grid(cost_map, field, frame_id);
+    if (msg.data.empty()) {
+      return;
+    }
+    costmap_pub_->publish(msg);
+  }
+
+  nav_msgs::msg::OccupancyGrid TVVFVONode::debug_build_costmap_grid(
+      const CostMapResult& cost_map,
+      const VectorField& field,
+      const std::string& frame_id) const
+  {
+    return build_costmap_grid(cost_map, field, frame_id);
+  }
+
   // ヘルパー関数: ベクトルを可視化すべきか判定
   bool TVVFVONode::should_visualize_vector(const std::array<double, 2>& vector) const
   {

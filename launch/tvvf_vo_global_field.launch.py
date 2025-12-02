@@ -79,7 +79,6 @@ def generate_launch_description():
             ('cmd_vel', '/cmd_vel'),
             ('map', '/map'),
             ('clicked_point', '/clicked_point'),
-            ('dynamic_obstacles', '/dynamic_obstacles'),
             ('static_obstacles', '/static_obstacles'),
             ('planned_path', '/planned_path'),
         ]

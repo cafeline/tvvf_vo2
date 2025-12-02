@@ -38,58 +38,6 @@ std::array<double, 2> clampMagnitude(const std::array<double, 2>& arr,
 SmoothVelocityOptimizer::SmoothVelocityOptimizer(const OptimizationOptions& options)
     : options_(options) {}
 
-std::vector<SmoothVelocityOptimizer::ObstacleSample>
-SmoothVelocityOptimizer::buildObstacleSamples(
-    const OptimizationState& state) const {
-  std::vector<ObstacleSample> samples;
-  samples.reserve(state.static_obstacles.size() + state.dynamic_obstacles.size());
-
-  for (const auto& pos : state.static_obstacles) {
-    samples.push_back({pos, options_.obstacle_safe_distance});
-  }
-
-  for (const auto& dyn : state.dynamic_obstacles) {
-    samples.push_back({dyn.position, std::max(dyn.radius, 0.1)});
-  }
-  return samples;
-}
-
-Velocity SmoothVelocityOptimizer::computeAvoidanceVector(
-    const Position& robot_pos,
-    const std::vector<ObstacleSample>& obstacles) const {
-  Velocity avoidance(0.0, 0.0);
-  if (obstacles.empty()) {
-    return avoidance;
-  }
-
-  for (const auto& obs : obstacles) {
-    double dx = robot_pos.x - obs.position.x;
-    double dy = robot_pos.y - obs.position.y;
-    double distance = std::hypot(dx, dy);
-
-    const double base_range = options_.repulsive_influence_range > 0.0
-        ? options_.repulsive_influence_range
-        : options_.obstacle_influence_range;
-    double effective_range = std::max(base_range,
-                                      obs.radius + options_.obstacle_safe_distance);
-
-    if (distance < EPSILON || distance > effective_range) {
-      continue;
-    }
-
-    double normalized = (effective_range - distance) / effective_range;
-    double strength = normalized * normalized;  // quadratic decay
-    double inv_dist = 1.0 / std::max(distance, EPSILON);
-
-    avoidance.vx += (dx * inv_dist) * strength;
-    avoidance.vy += (dy * inv_dist) * strength;
-  }
-
-  avoidance.vx *= options_.repulsive_strength;
-  avoidance.vy *= options_.repulsive_strength;
-  return avoidance;
-}
-
 Velocity SmoothVelocityOptimizer::clampVelocity(
     const Velocity& candidate,
     const Velocity& previous,

@@ -51,9 +51,6 @@ tvvf_vo_c_node:
     vector_field_path_width: 4.0 # パス幅 [m]
     
     # 斥力パラメータ（静的障害物用）
-    repulsive_strength: 1.0         # 斥力の強度
-    repulsive_influence_range: 2.0  # 斥力の影響範囲 [m]
-    
     # デバッグ・可視化
     enable_visualization: true           # 可視化マーカーの有効化
     enable_vector_field_viz: true        # ベクトル場可視化の有効化

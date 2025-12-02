@@ -55,7 +55,7 @@ namespace tvvf_vo_c
 
     auto region = build_planning_region();
     latest_field_ = global_field_generator_->computeFieldOnTheFly(
-        map_to_use.value(), goal_->position, dynamic_obstacles_, region);
+        map_to_use.value(), goal_->position, {}, region);
 
     if (!latest_field_.has_value() || latest_field_->width == 0 || latest_field_->height == 0) {
       latest_field_.reset();
@@ -78,8 +78,6 @@ namespace tvvf_vo_c
     opt_state.desired_velocity = desired_velocity;
     opt_state.previous_velocity = previous_velocity_command_.value_or(Velocity(0.0, 0.0));
     opt_state.robot_position = robot_state_->position;
-    opt_state.dynamic_obstacles = dynamic_obstacles_;
-    opt_state.static_obstacles.clear();  // 静的障害物は repulsive force に統合済み
     opt_state.max_speed = config_.max_linear_velocity;
     opt_state.dt = 0.05;
 
@@ -100,6 +98,16 @@ namespace tvvf_vo_c
   {
     if (!latest_field_.has_value()) {
       return;
+    }
+
+    if (global_field_generator_) {
+      const auto & cost_map = global_field_generator_->getLastCostMap();
+      if (cost_map.has_value()) {
+        const std::string frame_id = current_map_.has_value()
+            ? current_map_->header.frame_id
+            : this->get_parameter("global_frame").as_string();
+        publish_costmap_visualization(*cost_map, *latest_field_, frame_id);
+      }
     }
 
     if (latest_field_->width > 0 && latest_field_->height > 0) {
@@ -127,15 +135,18 @@ namespace tvvf_vo_c
       const double origin_y = merged.info.origin.position.y;
       for (uint32_t row = 0; row < merged.info.height; ++row) {
         for (uint32_t col = 0; col < merged.info.width; ++col) {
-          const size_t idx = static_cast<size_t>(row) * merged.info.width + col;
-          const int8_t val = merged.data[idx];
-          if (val < 0) {
-            continue;
-          }
           const double wx = origin_x + (static_cast<double>(col) + 0.5) * res;
           const double wy = origin_y + (static_cast<double>(row) + 0.5) * res;
           const double dx = wx - robot_state_->position.x;
           const double dy = wy - robot_state_->position.y;
+          const size_t idx = static_cast<size_t>(row) * merged.info.width + col;
+          const int8_t val = merged.data[idx];
+          if (val < 0) {
+            if (dx * dx + dy * dy <= clear_r2) {
+              merged.data[idx] = 0;
+            }
+            continue;
+          }
           if (dx * dx + dy * dy <= clear_r2) {
             merged.data[idx] = 0;
           }

@@ -32,6 +32,8 @@ namespace tvvf_vo_c
     planned_path_pub_ = this->create_publisher<nav_msgs::msg::Path>("planned_path", 10);
     goal_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("goal_marker", 10);
     cmd_velocity_marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("cmd_vel_marker", 10);
+    auto costmap_qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
+    costmap_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("tvvf_vo_costmap", costmap_qos);
 
     // サブスクライバー初期化
     auto map_qos = rclcpp::QoS(1).reliable().transient_local();

@@ -15,8 +15,6 @@ struct OptimizationOptions {
   double smooth_weight{4.0};
   double obstacle_weight{2.0};
   double obstacle_influence_range{1.5};
-  double repulsive_strength{1.0};
-  double repulsive_influence_range{2.0};
   double obstacle_safe_distance{0.4};
   double max_linear_acceleration{0.5};
 };
@@ -40,17 +38,6 @@ public:
   void setOptions(const OptimizationOptions& options) { options_ = options; }
 
 private:
-  struct ObstacleSample {
-    Position position;
-    double radius;
-  };
-
-  std::vector<ObstacleSample> buildObstacleSamples(
-      const OptimizationState& state) const;
-
-  Velocity computeAvoidanceVector(const Position& robot_pos,
-                                  const std::vector<ObstacleSample>& obstacles) const;
-
   Velocity clampVelocity(const Velocity& candidate,
                          const Velocity& previous,
                          double max_speed,
