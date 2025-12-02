@@ -18,7 +18,7 @@ namespace tvvf_vo_c
     try
     {
       geometry_msgs::msg::PoseArray pose_array;
-      const std::string global_frame = this->get_parameter("global_frame").as_string();
+      const std::string global_frame = cached_params_.global_frame;
 
       pose_array.header.frame_id = global_frame;
       pose_array.header.stamp = this->get_clock()->now();
@@ -90,7 +90,7 @@ namespace tvvf_vo_c
     }
 
     grid.header.frame_id = frame_id.empty()
-        ? this->get_parameter("global_frame").as_string()
+        ? cached_params_.global_frame
         : frame_id;
     grid.header.stamp = this->now();
 

@@ -43,6 +43,19 @@ private:
     std::unique_ptr<SmoothVelocityOptimizer> velocity_optimizer_;
     TVVFVOConfig config_;
     CostMapSettings cost_map_settings_;
+    struct CachedParams {
+        std::string base_frame;
+        std::string global_frame;
+        double goal_tolerance{0.0};
+        double orientation_tolerance{0.0};
+        double turning_linear_scale{0.0};
+        double turning_angular_gain{0.0};
+        double tracking_angular_gain{0.0};
+        double occupancy_clear_radius{0.0};
+        double costmap_resolution{0.0};
+        double vector_field_path_width{0.0};
+        double robot_radius{0.0};
+    } cached_params_;
     std::optional<VectorField> latest_field_;
     std::optional<Velocity> previous_velocity_command_;
     std::string base_frame_;

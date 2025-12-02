@@ -57,10 +57,12 @@ class CostMapBuilder {
 public:
     explicit CostMapBuilder(const CostMapSettings& settings = CostMapSettings());
 
+    void build(const nav_msgs::msg::OccupancyGrid& map, CostMapResult& result) const;
     CostMapResult build(const nav_msgs::msg::OccupancyGrid& map) const;
 
 private:
     CostMapSettings settings_;
+    mutable std::vector<bool> obstacle_mask_buffer_;
 };
 
 }  // namespace tvvf_vo_c

@@ -9,8 +9,8 @@ namespace tvvf_vo_c
   {
     try
     {
-      std::string base_frame = this->get_parameter("base_frame").as_string();
-      std::string global_frame = this->get_parameter("global_frame").as_string();
+      const std::string& base_frame = cached_params_.base_frame;
+      const std::string& global_frame = cached_params_.global_frame;
 
       // TF取得
       geometry_msgs::msg::TransformStamped transform_stamped;
@@ -37,9 +37,9 @@ namespace tvvf_vo_c
       // ロボット状態作成
       RobotState robot_state(
           position, velocity, yaw,
-          this->get_parameter("max_linear_velocity").as_double(),
+          config_.max_linear_velocity,
           1.0,  // max_acceleration固定値
-          this->get_parameter("robot_radius").as_double());
+          cached_params_.robot_radius);
 
       return robot_state;
     }

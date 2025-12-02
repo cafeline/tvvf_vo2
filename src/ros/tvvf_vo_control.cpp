@@ -73,11 +73,8 @@ namespace tvvf_vo_c
     cmd_msg.angular.z = angular_vel;
 
     // 速度制限（convert_to_differential_drive内で既に考慮されているが、念のため）
-    double max_linear_vel = this->get_parameter("max_linear_velocity").as_double();
-    double max_angular_vel = this->get_parameter("max_angular_velocity").as_double();
-
-    cmd_msg.linear.x = std::clamp(cmd_msg.linear.x, -max_linear_vel, max_linear_vel);
-    cmd_msg.angular.z = std::clamp(cmd_msg.angular.z, -max_angular_vel, max_angular_vel);
+    cmd_msg.linear.x = std::clamp(cmd_msg.linear.x, -config_.max_linear_velocity, config_.max_linear_velocity);
+    cmd_msg.angular.z = std::clamp(cmd_msg.angular.z, -config_.max_angular_velocity, config_.max_angular_velocity);
 
     cmd_vel_pub_->publish(cmd_msg);
     publish_command_marker(cmd_msg);
@@ -93,10 +90,10 @@ namespace tvvf_vo_c
     // 現在の姿勢との角度差
     double angle_diff = math_utils::normalize_angle(target_angle - current_orientation);
 
-    const double orientation_tolerance = this->get_parameter("orientation_tolerance").as_double();
-    const double turning_linear_scale = this->get_parameter("turning_linear_scale").as_double();
-    const double turning_angular_gain = this->get_parameter("turning_angular_gain").as_double();
-    const double tracking_angular_gain = this->get_parameter("tracking_angular_gain").as_double();
+    const double orientation_tolerance = cached_params_.orientation_tolerance;
+    const double turning_linear_scale = cached_params_.turning_linear_scale;
+    const double turning_angular_gain = cached_params_.turning_angular_gain;
+    const double tracking_angular_gain = cached_params_.tracking_angular_gain;
 
     // 角度差が大きい場合は回転を優先
     double linear_velocity, angular_velocity;
@@ -154,11 +151,11 @@ void TVVFVONode::publish_planned_path()
     path_msg.poses.push_back(pose);
 
     // ゴール到達チェック
-    double dist_to_goal = std::sqrt(
-        std::pow(goal_->position.x - current_pos.x, 2) +
-        std::pow(goal_->position.y - current_pos.y, 2));
-    
-    if (dist_to_goal < goal_->tolerance) {
+    const double dx_goal = goal_->position.x - current_pos.x;
+    const double dy_goal = goal_->position.y - current_pos.y;
+    const double dist_goal_sq = dx_goal * dx_goal + dy_goal * dy_goal;
+    const double tol_goal_sq = goal_->tolerance * goal_->tolerance;
+    if (dist_goal_sq < tol_goal_sq) {
       break;
     }
 
@@ -184,7 +181,7 @@ void TVVFVONode::publish_planned_path()
 
     visualization_msgs::msg::Marker marker;
     marker.header.frame_id = base_frame_.empty()
-        ? this->get_parameter("base_frame").as_string()
+        ? cached_params_.base_frame
         : base_frame_;
     marker.header.stamp = this->now();
     marker.ns = "tvvf_cmd_velocity";

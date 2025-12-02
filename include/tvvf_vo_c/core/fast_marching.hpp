@@ -32,11 +32,18 @@ private:
         FMMCell() : x(0), y(0), time(std::numeric_limits<double>::infinity()), status(FAR) {}
         
         bool operator>(const FMMCell& other) const {
-            return time > other.time;
+        return time > other.time;
         }
     };
     
-    std::vector<std::vector<FMMCell>> fmm_grid_;
+    struct FMMRowView {
+        FMMCell* data{nullptr};
+        FMMCell& operator[](size_t idx) { return data[idx]; }
+        const FMMCell& operator[](size_t idx) const { return data[idx]; }
+    };
+
+    std::vector<FMMCell> fmm_cells_;
+    std::vector<FMMRowView> fmm_grid_;
     
     // FMMCell*の比較関数
     struct FMMCellCompare {

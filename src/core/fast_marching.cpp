@@ -66,14 +66,25 @@ void FastMarching::initializeFieldMetadata(const nav_msgs::msg::OccupancyGrid& m
 }
 
 void FastMarching::allocateGridMemory() {
-    field_.grid.resize(field_.height);
-    field_.vectors.resize(field_.height);
-    fmm_grid_.resize(field_.height);
-    
-    for (int y = 0; y < field_.height; ++y) {
-        field_.grid[y].resize(field_.width);
-        field_.vectors[y].resize(field_.width, {0.0, 0.0});
-        fmm_grid_[y].resize(field_.width);
+    field_.resize(field_.width, field_.height);
+
+    const size_t row_count = static_cast<size_t>(std::max(field_.height, 0));
+    const size_t cell_count =
+        static_cast<size_t>(std::max(field_.width, 0)) * row_count;
+
+    fmm_cells_.resize(cell_count);
+    fmm_grid_.resize(row_count);
+
+    if (field_.width > 0 && field_.height > 0 && !fmm_cells_.empty()) {
+        for (int y = 0; y < field_.height; ++y) {
+            const size_t offset =
+                static_cast<size_t>(y) * static_cast<size_t>(field_.width);
+            fmm_grid_[static_cast<size_t>(y)].data = fmm_cells_.data() + offset;
+        }
+    } else {
+        for (auto& row : fmm_grid_) {
+            row.data = nullptr;
+        }
     }
 }
 
@@ -325,11 +336,9 @@ bool FastMarching::isValidGridPosition(int x, int y) const {
 }
 
 void FastMarching::resetFMMGrid() {
-    for (auto& row : fmm_grid_) {
-        for (auto& cell : row) {
-            cell.time = std::numeric_limits<double>::infinity();
-            cell.status = FAR;
-        }
+    for (auto& cell : fmm_cells_) {
+        cell.time = std::numeric_limits<double>::infinity();
+        cell.status = FAR;
     }
 }
 

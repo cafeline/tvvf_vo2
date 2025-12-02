@@ -7,7 +7,7 @@ namespace tvvf_vo_c
   void TVVFVONode::clicked_point_callback(const geometry_msgs::msg::PointStamped::SharedPtr msg)
   {
     Position goal_position(msg->point.x, msg->point.y);
-    goal_ = Goal(goal_position, this->get_parameter("goal_tolerance").as_double());
+    goal_ = Goal(goal_position, cached_params_.goal_tolerance);
 
     RCLCPP_INFO(this->get_logger(), "Goal set from clicked_point: (%.2f, %.2f)",
                 goal_position.x, goal_position.y);
@@ -16,7 +16,7 @@ namespace tvvf_vo_c
   void TVVFVONode::goal_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
   {
     Position goal_position(msg->pose.position.x, msg->pose.position.y);
-    goal_ = Goal(goal_position, this->get_parameter("goal_tolerance").as_double());
+    goal_ = Goal(goal_position, cached_params_.goal_tolerance);
 
     RCLCPP_INFO(this->get_logger(), "Goal set from goal_pose: (%.2f, %.2f)",
                 goal_position.x, goal_position.y);
