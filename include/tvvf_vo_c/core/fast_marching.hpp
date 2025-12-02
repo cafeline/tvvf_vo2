@@ -15,7 +15,8 @@ class FastMarching {
 private:
     VectorField field_;
     static constexpr double DEFAULT_TRAVEL_COST = 1.0;
-    
+    double occupied_threshold_{50.0};
+    double free_threshold_{0.0};
     // FMM用の状態
     enum CellStatus {
         FAR,      // 未処理
@@ -53,6 +54,7 @@ public:
     void initializeFromOccupancyGrid(const nav_msgs::msg::OccupancyGrid& map);
     void initializeFromOccupancyGrid(const nav_msgs::msg::OccupancyGrid& map,
                                      const std::vector<double>& speed_layer);
+    void setOccupancyThresholds(double occupied_threshold, double free_threshold);
     
     // ゴールからの距離場を計算
     void computeDistanceField(const Position& goal);

@@ -69,16 +69,38 @@ namespace tvvf_vo_c
 
     const double vector_norm = std::hypot(field_vector[0], field_vector[1]);
     Velocity desired_velocity(0.0, 0.0);
-    if (vector_norm > 1e-6) {
-      desired_velocity.vx = field_vector[0] * config_.max_linear_velocity;
-      desired_velocity.vy = field_vector[1] * config_.max_linear_velocity;
+
+    double local_speed_limit = config_.max_linear_velocity;
+    const auto cost_map = global_field_generator_->getLastCostMap();
+    if (cost_map.has_value() && latest_field_.has_value()) {
+      const double res = std::max(latest_field_->resolution, 1e-6);
+      const int col = static_cast<int>(
+        std::floor((robot_state_->position.x - latest_field_->origin.x) / res));
+      const int row = static_cast<int>(
+        std::floor((robot_state_->position.y - latest_field_->origin.y) / res));
+      if (col >= 0 && row >= 0 &&
+        col < static_cast<int>(cost_map->width) &&
+        row < static_cast<int>(cost_map->height))
+      {
+        const double cell_speed = cost_map->speedAt(col, row);
+        if (cell_speed <= 0.0) {
+          local_speed_limit = 0.0;
+        } else {
+          local_speed_limit = std::min(config_.max_linear_velocity, cell_speed);
+        }
+      }
+    }
+
+    if (vector_norm > 1e-6 && local_speed_limit > 0.0) {
+      desired_velocity.vx = field_vector[0] * local_speed_limit;
+      desired_velocity.vy = field_vector[1] * local_speed_limit;
     }
 
     OptimizationState opt_state;
     opt_state.desired_velocity = desired_velocity;
     opt_state.previous_velocity = previous_velocity_command_.value_or(Velocity(0.0, 0.0));
     opt_state.robot_position = robot_state_->position;
-    opt_state.max_speed = config_.max_linear_velocity;
+    opt_state.max_speed = local_speed_limit;
     opt_state.dt = 0.05;
 
     Velocity optimized_velocity = desired_velocity;
@@ -127,6 +149,7 @@ namespace tvvf_vo_c
     const bool has_robot_state = robot_state_.has_value();
     const double clear_r2 = clear_radius * clear_radius;
 
+    // 1) 足元クリア
     if (has_robot_state && clear_radius > 0.0 &&
       merged.info.width > 0 && merged.info.height > 0)
     {
@@ -140,13 +163,6 @@ namespace tvvf_vo_c
           const double dx = wx - robot_state_->position.x;
           const double dy = wy - robot_state_->position.y;
           const size_t idx = static_cast<size_t>(row) * merged.info.width + col;
-          const int8_t val = merged.data[idx];
-          if (val < 0) {
-            if (dx * dx + dy * dy <= clear_r2) {
-              merged.data[idx] = 0;
-            }
-            continue;
-          }
           if (dx * dx + dy * dy <= clear_r2) {
             merged.data[idx] = 0;
           }
@@ -154,6 +170,7 @@ namespace tvvf_vo_c
       }
     }
 
+    // 2) マスク適用
     if (!obstacle_mask_.has_value()) {
       const double override_res = this->get_parameter("costmap_resolution").as_double();
       if (override_res > 1e-6 &&
@@ -218,6 +235,7 @@ namespace tvvf_vo_c
       }
     }
 
+    // 3) 解像度変更（最後にまとめて）
     const double override_res = this->get_parameter("costmap_resolution").as_double();
     if (override_res > 1e-6 &&
       std::abs(override_res - merged.info.resolution) > 1e-6)

@@ -9,7 +9,6 @@ namespace tvvf_vo_c {
 
 // 定数定義
 namespace {
-    constexpr int8_t OBSTACLE_THRESHOLD = 50;      // 障害物判定の閾値
     constexpr int8_t UNKNOWN_CELL = -1;            // 不明なセルの値
     constexpr double GRID_COST = 1.0;              // グリッド単位での移動コスト
     constexpr double GRADIENT_EPSILON = 1e-6;      // 勾配計算の最小値
@@ -29,6 +28,11 @@ void FastMarching::initializeFromOccupancyGrid(
     const nav_msgs::msg::OccupancyGrid& map,
     const std::vector<double>& speed_layer) {
     initializeFromOccupancyGridImpl(map, &speed_layer);
+}
+
+void FastMarching::setOccupancyThresholds(double occupied_threshold, double free_threshold) {
+    occupied_threshold_ = occupied_threshold;
+    free_threshold_ = free_threshold;
 }
 
 void FastMarching::initializeFromOccupancyGridImpl(
@@ -83,8 +87,15 @@ void FastMarching::initializeCell(int x, int y, int8_t occupancy, double speed_v
     fmm_cell.x = x;
     fmm_cell.y = y;
     
-    // 障害物判定
-    const bool occupancy_obstacle = (occupancy > OBSTACLE_THRESHOLD || occupancy == UNKNOWN_CELL);
+    // 障害物判定（パラメータ閾値で判定）
+    bool occupancy_obstacle = false;
+    if (occupancy == UNKNOWN_CELL) {
+        occupancy_obstacle = true;
+    } else {
+        const double occ = static_cast<double>(occupancy);
+        occupancy_obstacle = (occ >= occupied_threshold_) ||
+            (occ > free_threshold_ && occ < occupied_threshold_);
+    }
     if (!std::isfinite(speed_value)) {
         speed_value = 0.0;
     }

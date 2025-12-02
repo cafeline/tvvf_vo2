@@ -93,6 +93,11 @@ GlobalFieldGenerator::GlobalFieldGenerator()
 void GlobalFieldGenerator::setCostMapSettings(const CostMapSettings& settings) {
     cost_map_settings_ = settings;
     cost_map_builder_ = CostMapBuilder(cost_map_settings_);
+    if (fast_marching_) {
+        fast_marching_->setOccupancyThresholds(
+            cost_map_settings_.occupied_threshold,
+            cost_map_settings_.free_threshold);
+    }
 }
 
 // 静的場の事前計算

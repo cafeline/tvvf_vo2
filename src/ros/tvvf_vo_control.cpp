@@ -57,6 +57,13 @@ namespace tvvf_vo_c
 
     auto cmd_msg = geometry_msgs::msg::Twist();
 
+    // 目標ベクトルがゼロなら即停止を出して回頭を防ぐ
+    if (std::abs(desired_vx) < 1e-6 && std::abs(desired_vy) < 1e-6) {
+      cmd_vel_pub_->publish(cmd_msg);
+      publish_command_marker(cmd_msg);
+      return;
+    }
+
     // 差動駆動ロボットでは横移動不可能なので、変換関数を使用
     auto [linear_vel, angular_vel] = convert_to_differential_drive(
         desired_vx, desired_vy, robot_state_->orientation);
