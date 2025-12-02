@@ -7,11 +7,6 @@ tvvf_vo_global_field:
     # グローバルフィールド生成
     # ======================
     global_field:
-      # 斥力パラメータ
-      repulsive_gain: 1.5        # 斥力ゲイン（大きいほど障害物を強く回避）
-      influence_radius: 3.0       # 障害物の影響半径 [m]
-      min_distance: 0.1          # 最小距離（ゼロ除算防止）[m]
-      
       # ブレンディングパラメータ
       blend_weight: 0.6          # 動的障害物の影響度（0.0-1.0）
       
@@ -24,7 +19,6 @@ tvvf_vo_global_field:
     # ======================
     tvvf:
       k_attraction: 1.2          # ゴール引力ゲイン
-      k_repulsion: 2.5           # 障害物斥力ゲイン（基本）
       influence_radius: 2.5      # TVVFでの影響半径 [m]
       
       # 時間ベクトル場

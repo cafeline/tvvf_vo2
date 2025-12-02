@@ -164,7 +164,7 @@ public:
     void publish_empty_visualization();
 
     /**
-     * @brief 合成ベクトル場の可視化（斥力込み）
+     * @brief 合成ベクトル場の可視化
      * @param field 元のベクトル場
      */
     void publish_combined_field_visualization(const VectorField& field);

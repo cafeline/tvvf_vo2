@@ -41,7 +41,6 @@ def generate_launch_description():
             
             # TVVF基本パラメータ
             'k_attraction': 1.0,
-            'k_repulsion': 2.0,
             'influence_radius': 3.0,
             
             # 経路統合パラメータ

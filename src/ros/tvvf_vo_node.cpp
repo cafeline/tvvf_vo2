@@ -80,7 +80,7 @@ namespace tvvf_vo_c
     this->declare_parameter("turning_angular_gain", 2.0);
     this->declare_parameter("tracking_angular_gain", 1.0);
 
-    // 斥力パラメータ
+    // コストマップ関連
     this->declare_parameter("costmap_occupied_threshold", 50.0);
     this->declare_parameter("costmap_free_threshold", 10.0);
     this->declare_parameter("costmap_alpha", 1.0);
