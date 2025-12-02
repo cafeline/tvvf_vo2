@@ -64,6 +64,7 @@ namespace tvvf_vo_c
           ? global_field_generator_->getLastComputationTime() * 1000.0
           : 0.0;
 
+      // 統計（スライディングウィンドウ100）
       timing_total_ms_window_.push_back(ms_total);
       if (timing_total_ms_window_.size() > 100) {
         timing_total_ms_window_.pop_front();
