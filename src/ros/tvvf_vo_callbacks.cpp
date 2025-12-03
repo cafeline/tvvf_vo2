@@ -21,6 +21,10 @@ namespace tvvf_vo_c
     RCLCPP_INFO(this->get_logger(), "Goal set from goal_pose: (%.2f, %.2f)",
                 goal_position.x, goal_position.y);
 
+    if (!use_rviz_ || !goal_marker_pub_) {
+      return;
+    }
+
     // ゴールマーカーを可視化
     auto goal_marker = visualization_msgs::msg::Marker();
     goal_marker.header.frame_id = "map";

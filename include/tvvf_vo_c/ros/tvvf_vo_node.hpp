@@ -35,7 +35,7 @@ public:
     /**
      * @brief コンストラクタ
      */
-    TVVFVONode();
+    explicit TVVFVONode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
 
 private:
     // コア機能
@@ -61,6 +61,8 @@ private:
     std::string base_frame_;
     int cmd_velocity_marker_seq_{0};
     std::deque<double> timing_total_ms_window_;
+    rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
+    bool use_rviz_{true};
 
     // 状態変数
     std::optional<RobotState> robot_state_;

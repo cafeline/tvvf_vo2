@@ -50,8 +50,10 @@ namespace tvvf_vo_c
       const auto control_output = compute_control_output();
 
       // 可視化を更新
-      update_visualization();
-      publish_planned_path();
+      if (use_rviz_) {
+        update_visualization();
+        publish_planned_path();
+      }
 
       // 制御コマンドを発行
       publish_control_command(control_output);
@@ -190,7 +192,7 @@ void TVVFVONode::publish_planned_path()
 
   void TVVFVONode::publish_command_marker(const geometry_msgs::msg::Twist& cmd_msg)
   {
-    if (!cmd_velocity_marker_pub_) {
+    if (!use_rviz_ || !cmd_velocity_marker_pub_) {
       return;
     }
 

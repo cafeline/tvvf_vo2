@@ -6,6 +6,7 @@ namespace tvvf_vo_c
 {
   namespace {
     constexpr double MIN_VECTOR_MAGNITUDE = 0.01;
+    constexpr double VECTOR_FIELD_PUBLISH_INTERVAL_SEC = 0.5;
   }
 
   void TVVFVONode::publish_empty_visualization()
@@ -15,13 +16,23 @@ namespace tvvf_vo_c
 
   void TVVFVONode::publish_combined_field_visualization(const VectorField& field)
   {
+    if (!use_rviz_) {
+      return;
+    }
     try
     {
+      const auto now = this->now();
+      const auto steady_now = steady_clock_.now();
+      const double elapsed = (steady_now - last_vector_field_publish_time_).seconds();
+      if (elapsed < VECTOR_FIELD_PUBLISH_INTERVAL_SEC) {
+        return;
+      }
+
       geometry_msgs::msg::PoseArray pose_array;
       const std::string global_frame = cached_params_.global_frame;
 
       pose_array.header.frame_id = global_frame;
-      pose_array.header.stamp = this->get_clock()->now();
+      pose_array.header.stamp = now;
 
       // ベクトル場と同じ解像度ですべてのセルを追加
       for (int y = 0; y < field.height; ++y)
@@ -62,6 +73,7 @@ namespace tvvf_vo_c
 
       if (vector_field_pose_pub_ && !pose_array.poses.empty()) {
         vector_field_pose_pub_->publish(pose_array);
+        last_vector_field_publish_time_ = steady_now;
       }
     }
     catch (const std::exception &e)

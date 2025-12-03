@@ -189,11 +189,13 @@ namespace tvvf_vo_c
         const std::string frame_id = current_map_.has_value()
             ? current_map_->header.frame_id
             : cached_params_.global_frame;
-        publish_costmap_visualization(*cost_map, *latest_field_, frame_id);
+        if (use_rviz_) {
+          publish_costmap_visualization(*cost_map, *latest_field_, frame_id);
+        }
       }
     }
 
-    if (latest_field_->width > 0 && latest_field_->height > 0) {
+    if (use_rviz_ && latest_field_->width > 0 && latest_field_->height > 0) {
       publish_combined_field_visualization(*latest_field_);
     }
   }

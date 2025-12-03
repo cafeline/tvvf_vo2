@@ -5,13 +5,16 @@
 namespace tvvf_vo_c
 {
 
-  TVVFVONode::TVVFVONode() : Node("tvvf_vo_c_node")
+  TVVFVONode::TVVFVONode(const rclcpp::NodeOptions & options)
+  : Node("tvvf_vo_c_node", options)
   {
     // パラメータ設定
     setup_parameters();
 
     // 設定初期化
     config_ = create_config_from_parameters();
+    use_rviz_ = this->get_parameter("use_rviz").as_bool();
+    RCLCPP_INFO(this->get_logger(), "use_rviz parameter = %s", use_rviz_ ? "true" : "false");
     base_frame_ = this->get_parameter("base_frame").as_string();
     cached_params_.base_frame = base_frame_;
     cached_params_.global_frame = this->get_parameter("global_frame").as_string();
@@ -34,6 +37,8 @@ namespace tvvf_vo_c
     // TF2関連初期化
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    last_vector_field_publish_time_ =
+      steady_clock_.now() - rclcpp::Duration::from_seconds(0.5);
 
     // パブリッシャー初期化
     cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel_raw", 10);
@@ -99,6 +104,7 @@ namespace tvvf_vo_c
     this->declare_parameter("turning_angular_gain", 2.0);
     this->declare_parameter("tracking_angular_gain", 1.0);
     this->declare_parameter("control_loop_rate", 20.0);
+    this->declare_parameter("use_rviz", true);
 
     // コストマップ関連
     this->declare_parameter("costmap_occupied_threshold", 50.0);
