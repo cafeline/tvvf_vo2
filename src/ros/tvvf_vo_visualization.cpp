@@ -21,7 +21,7 @@ namespace tvvf_vo_c
     pose_array.header.frame_id = cached_params_.global_frame;
     pose_array.header.stamp = this->now();
 
-    auto is_in_overlay = [&](const Position& pos) {
+    auto overlay_contains = [&](const Position& pos) {
       for (const auto& overlay : field.overlays) {
         FieldRegion region = overlay.region.has_value()
             ? overlay.region.value()
@@ -39,22 +39,25 @@ namespace tvvf_vo_c
       return false;
     };
 
-    auto append_samples = [&](const VectorField& vf, bool skip_overlay_region) {
+    auto append_field = [&](const VectorField& vf, bool skip_overlay_region) {
       for (int y = 0; y < vf.height; ++y) {
         for (int x = 0; x < vf.width; ++x) {
           const Position world_pos = vf.gridToWorld(x, y);
-          if (skip_overlay_region && is_in_overlay(world_pos)) {
+          if (skip_overlay_region && overlay_contains(world_pos)) {
             continue;
           }
           const auto combined_vector =
             compute_navigation_vector(vf.vectors[static_cast<size_t>(y)][static_cast<size_t>(x)],
                                       world_pos);
+
           if (!is_valid_position(world_pos) || !is_valid_vector(combined_vector)) {
             continue;
           }
+
           if (!should_visualize_vector(combined_vector)) {
             continue;
           }
+
           geometry_msgs::msg::Pose pose;
           pose.position.x = world_pos.x;
           pose.position.y = world_pos.y;
@@ -68,12 +71,11 @@ namespace tvvf_vo_c
       }
     };
 
-    // base field at its own resolution, skipping overlay regions
-    append_samples(field, !field.overlays.empty());
-
-    // overlay fields at their own resolutions
+    // ベース解像度で全域サンプル（オーバーレイ領域は重複を避ける）
+    append_field(field, !field.overlays.empty());
+    // オーバーレイはそれぞれの解像度で追加
     for (const auto& overlay : field.overlays) {
-      append_samples(overlay, false);
+      append_field(overlay, false);
     }
 
     return pose_array;

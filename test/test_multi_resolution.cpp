@@ -108,7 +108,7 @@ TEST(GlobalFieldGeneratorMultiResTest, BuildsLocalCostOverlayEvenIfGoalOutside) 
     map.info.origin.position.y = 0.0;
     map.data.assign(map.info.width * map.info.height, 0);
 
-    Position goal_far(5.0, 5.0);
+    Position goal_far(3.0, 3.0);
     Position focus(0.0, 0.0);
 
     GlobalFieldGenerator generator;
@@ -123,8 +123,13 @@ TEST(GlobalFieldGeneratorMultiResTest, BuildsLocalCostOverlayEvenIfGoalOutside) 
     ASSERT_TRUE(cost_map.has_value());
 
     EXPECT_FALSE(cost_map->overlays.empty());
-    // ゴールが外でもベクトルオーバーレイが生成される
-    EXPECT_FALSE(field.overlays.empty());
+    ASSERT_FALSE(field.overlays.empty());
+
+    // ゴールが外でも、細かい場がゼロでないことを確認
+    const Position sample_pos(0.5, 0.5);
+    const auto overlay_vec = field.overlays.front().getVector(sample_pos);
+    const double overlay_norm = std::hypot(overlay_vec[0], overlay_vec[1]);
+    EXPECT_GT(overlay_norm, 1e-3);
 }
 
 int main(int argc, char **argv) {

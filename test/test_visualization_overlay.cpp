@@ -88,7 +88,7 @@ TEST_F(VisualizationOverlayTest, VectorPoseArraySamplesOverlayResolution)
   base.addOverlay(overlay);
 
   auto pose_array = node->debug_build_vector_pose_array(base);
-  ASSERT_EQ(pose_array.poses.size(), 7u);  // base 3 + overlay 4
+  ASSERT_EQ(pose_array.poses.size(), 7u);  // base(3) + overlay(4)
 
   // Overlay area (near origin) should have yaw ~ +pi/2
   bool found_overlay_dir = false;

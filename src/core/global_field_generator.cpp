@@ -15,6 +15,41 @@ namespace {
         FieldRegion region;
     };
 
+    std::array<double, 2> bilinearSampleVector(
+        const VectorField& base_field,
+        const Position& pos)
+    {
+        const auto [gx, gy] = base_field.worldToGrid(pos);
+        const int x0 = gx;
+        const int y0 = gy;
+        const int x1 = x0 + 1;
+        const int y1 = y0 + 1;
+
+        if (x0 < 0 || y0 < 0 ||
+            x1 >= base_field.width || y1 >= base_field.height) {
+            return {0.0, 0.0};
+        }
+
+        const double wx = (pos.x - (base_field.origin.x + (static_cast<double>(x0) + 0.5) * base_field.resolution)) / base_field.resolution;
+        const double wy = (pos.y - (base_field.origin.y + (static_cast<double>(y0) + 0.5) * base_field.resolution)) / base_field.resolution;
+        const double sx = std::clamp(wx, 0.0, 1.0);
+        const double sy = std::clamp(wy, 0.0, 1.0);
+
+        const auto v00 = base_field.vectors[static_cast<size_t>(y0)][static_cast<size_t>(x0)];
+        const auto v10 = base_field.vectors[static_cast<size_t>(y0)][static_cast<size_t>(x1)];
+        const auto v01 = base_field.vectors[static_cast<size_t>(y1)][static_cast<size_t>(x0)];
+        const auto v11 = base_field.vectors[static_cast<size_t>(y1)][static_cast<size_t>(x1)];
+
+        const double vx0 = v00[0] * (1.0 - sx) + v10[0] * sx;
+        const double vx1 = v01[0] * (1.0 - sx) + v11[0] * sx;
+        const double vy0 = v00[1] * (1.0 - sx) + v10[1] * sx;
+        const double vy1 = v01[1] * (1.0 - sx) + v11[1] * sx;
+
+        const double vx = vx0 * (1.0 - sy) + vx1 * sy;
+        const double vy = vy0 * (1.0 - sy) + vy1 * sy;
+        return {vx, vy};
+    }
+
     std::optional<CroppedMapResult> cropOccupancyGrid(
         const nav_msgs::msg::OccupancyGrid& map,
         const FieldRegion& requested_region) {
@@ -178,24 +213,47 @@ VectorField GlobalFieldGenerator::computeFieldOnTheFly(
                         local_patch->info.origin.position.y +
                             static_cast<double>(local_patch->info.height) * local_patch->info.resolution));
 
-                // ゴールが外でも、パッチ内部へクランプした目標で高解像度ベクトル場を生成
-                Position clamped_goal(
-                    std::clamp(goal.x, patch_region.min.x + local_patch->info.resolution * 0.5,
-                               patch_region.max.x - local_patch->info.resolution * 0.5),
-                    std::clamp(goal.y, patch_region.min.y + local_patch->info.resolution * 0.5,
-                               patch_region.max.y - local_patch->info.resolution * 0.5));
+                const bool goal_inside = patch_region.contains(goal);
+                if (goal_inside) {
+                    FastMarching local_fmm;
+                    local_fmm.setOccupancyThresholds(
+                        cost_map_settings_.occupied_threshold,
+                        cost_map_settings_.free_threshold);
+                    local_fmm.initializeFromOccupancyGrid(*local_patch, local_cost.speed_layer);
+                    local_fmm.computeDistanceField(goal);
+                    local_fmm.generateVectorField();
 
-                FastMarching local_fmm;
-                local_fmm.setOccupancyThresholds(
-                    cost_map_settings_.occupied_threshold,
-                    cost_map_settings_.free_threshold);
-                local_fmm.initializeFromOccupancyGrid(*local_patch, local_cost.speed_layer);
-                local_fmm.computeDistanceField(clamped_goal);
-                local_fmm.generateVectorField();
+                    VectorField local_field = local_fmm.getField();
+                    local_field.region = patch_region;
+                    static_field_.addOverlay(local_field);
+                } else {
+                    // ゴールがパッチ外なら、ベースベクトルを高解像度にバイリニア補間して重ねる
+                    VectorField refined;
+                    const int up_width = static_cast<int>(local_patch->info.width);
+                    const int up_height = static_cast<int>(local_patch->info.height);
+                    refined.resize(up_width, up_height);
+                    refined.resolution = local_patch->info.resolution;
+                    refined.origin = Position(
+                        local_patch->info.origin.position.x,
+                        local_patch->info.origin.position.y);
+                    refined.region = patch_region;
 
-                VectorField local_field = local_fmm.getField();
-                local_field.region = patch_region;
-                static_field_.addOverlay(local_field);
+                    for (int y = 0; y < up_height; ++y) {
+                        for (int x = 0; x < up_width; ++x) {
+                            const Position wp = refined.gridToWorld(x, y);
+                            auto v = bilinearSampleVector(static_field_, wp);
+                            const double norm = std::hypot(v[0], v[1]);
+                            if (norm > 1e-9) {
+                                v[0] /= norm;
+                                v[1] /= norm;
+                            } else {
+                                v = {0.0, 0.0};
+                            }
+                            refined.vectors[static_cast<size_t>(y)][static_cast<size_t>(x)] = v;
+                        }
+                    }
+                    static_field_.addOverlay(refined);
+                }
             }
         }
     }
