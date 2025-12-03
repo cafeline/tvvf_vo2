@@ -76,42 +76,6 @@ namespace tvvf_vo_c
       append_samples(overlay, false);
     }
 
-    // if no overlays but local_costmap_resolutionが指定されている場合は、より細かいサンプリングを上書きで追加
-    if (field.overlays.empty() && cached_params_.local_costmap_resolution > 1e-6 &&
-        cached_params_.local_costmap_resolution < field.resolution) {
-      const double res = cached_params_.local_costmap_resolution;
-      const double size_x = static_cast<double>(field.width) * field.resolution;
-      const double size_y = static_cast<double>(field.height) * field.resolution;
-      const uint32_t width = static_cast<uint32_t>(std::ceil(size_x / res));
-      const uint32_t height = static_cast<uint32_t>(std::ceil(size_y / res));
-      const double origin_x = field.origin.x;
-      const double origin_y = field.origin.y;
-      for (uint32_t row = 0; row < height; ++row) {
-        for (uint32_t col = 0; col < width; ++col) {
-          const Position world_pos(
-            origin_x + (static_cast<double>(col) + 0.5) * res,
-            origin_y + (static_cast<double>(row) + 0.5) * res);
-          const auto combined_vector =
-            compute_navigation_vector(field.getVector(world_pos), world_pos);
-          if (!is_valid_position(world_pos) || !is_valid_vector(combined_vector)) {
-            continue;
-          }
-          if (!should_visualize_vector(combined_vector)) {
-            continue;
-          }
-          geometry_msgs::msg::Pose pose;
-          pose.position.x = world_pos.x;
-          pose.position.y = world_pos.y;
-          pose.position.z = 0.0;
-          const double yaw = std::atan2(combined_vector[1], combined_vector[0]);
-          tf2::Quaternion q;
-          q.setRPY(0.0, 0.0, yaw);
-          pose.orientation = tf2::toMsg(q);
-          pose_array.poses.push_back(pose);
-        }
-      }
-    }
-
     return pose_array;
   }
 

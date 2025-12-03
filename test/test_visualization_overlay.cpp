@@ -123,8 +123,8 @@ TEST_F(VisualizationOverlayTest, VectorPoseArrayUsesLocalResolutionWhenNoOverlay
   }
 
   auto pose_array = node->debug_build_vector_pose_array(base);
-  // width=2,height=2,res=0.2 => span 0.4m, with local_res 0.1 => 4x4 samples =16
-  EXPECT_EQ(pose_array.poses.size(), 16u);
+  // オーバーレイなしではベース解像度のみ（2x2=4サンプル）
+  EXPECT_EQ(pose_array.poses.size(), 4u);
 }
 
 int main(int argc, char **argv) {
