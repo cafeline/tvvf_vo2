@@ -1,6 +1,7 @@
 #include "tvvf_vo_c/ros/tvvf_vo_node.hpp"
 #include <cmath>
 #include <chrono>
+#include <algorithm>
 
 namespace tvvf_vo_c
 {
@@ -124,8 +125,6 @@ namespace tvvf_vo_c
 
     auto base_field_vector = latest_field_->getVector(robot_state_->position);
     auto field_vector = compute_navigation_vector(base_field_vector, robot_state_->position);
-
-    const double vector_norm = std::hypot(field_vector[0], field_vector[1]);
     Velocity desired_velocity(0.0, 0.0);
 
     double local_speed_limit = config_.max_linear_velocity;
@@ -141,14 +140,11 @@ namespace tvvf_vo_c
         row < static_cast<int>(cost_map->height))
       {
         const double cell_speed = cost_map->speedAt(col, row);
-        if (cell_speed <= 0.0) {
-          local_speed_limit = 0.0;
-        } else {
-          local_speed_limit = std::min(config_.max_linear_velocity, cell_speed);
-        }
+        local_speed_limit = compute_speed_limit(cell_speed);
       }
     }
 
+    const double vector_norm = std::hypot(field_vector[0], field_vector[1]);
     if (vector_norm > 1e-6 && local_speed_limit > 0.0) {
       desired_velocity.vx = field_vector[0] * local_speed_limit;
       desired_velocity.vy = field_vector[1] * local_speed_limit;
@@ -175,6 +171,17 @@ namespace tvvf_vo_c
         0.01,
         0.05,
         1.0);
+  }
+
+  double TVVFVONode::compute_speed_limit(double cell_speed) const
+  {
+    const double max_speed = config_.max_linear_velocity;
+    double floor_speed = std::min(std::max(0.0, turning_linear_speed_mps_), max_speed);
+
+    if (cell_speed <= 0.0) {
+      return floor_speed;
+    }
+    return std::clamp(cell_speed, floor_speed, max_speed);
   }
 
   void TVVFVONode::update_visualization()

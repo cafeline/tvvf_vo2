@@ -15,7 +15,7 @@ tvvf_vo_c_node:
     goal_tolerance: 0.1
     vector_field_path_width: 4.0
     orientation_tolerance: 0.2
-    turning_linear_scale: 0.3
+    turning_linear_speed_mps: 0.15
     turning_angular_gain: 2.0
     tracking_angular_gain: 1.0
     control_loop_rate: 20.0  # [Hz]

@@ -48,7 +48,7 @@ private:
         std::string global_frame;
         double goal_tolerance{0.0};
         double orientation_tolerance{0.0};
-        double turning_linear_scale{0.0};
+        double turning_linear_speed_mps{0.0};
         double turning_angular_gain{0.0};
         double tracking_angular_gain{0.0};
         double occupancy_clear_radius{0.0};
@@ -63,6 +63,7 @@ private:
     std::deque<double> timing_total_ms_window_;
     rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
     bool use_rviz_{true};
+    double turning_linear_speed_mps_{0.0};
 
     // 状態変数
     std::optional<RobotState> robot_state_;
@@ -149,6 +150,9 @@ public:
     void debug_set_robot_position(const Position & pos) {
       robot_state_ = RobotState(pos, Velocity(0.0, 0.0), 0.0, 0.0, 0.0, 0.0);
     }
+    double debug_compute_speed_limit(double cell_speed) const {
+      return compute_speed_limit(cell_speed);
+    }
 
     /**
      * @brief メイン制御ループ
@@ -214,6 +218,7 @@ private:
     std::array<double, 2> compute_navigation_vector(
         const std::array<double, 2>& base_vector,
         const Position& world_pos) const;
+    double compute_speed_limit(double cell_speed) const;
     nav_msgs::msg::OccupancyGrid build_costmap_grid(
         const CostMapResult& cost_map,
         const VectorField& field,

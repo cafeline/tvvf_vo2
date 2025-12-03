@@ -20,13 +20,14 @@ namespace tvvf_vo_c
     cached_params_.global_frame = this->get_parameter("global_frame").as_string();
     cached_params_.goal_tolerance = this->get_parameter("goal_tolerance").as_double();
     cached_params_.orientation_tolerance = this->get_parameter("orientation_tolerance").as_double();
-    cached_params_.turning_linear_scale = this->get_parameter("turning_linear_scale").as_double();
+    cached_params_.turning_linear_speed_mps = this->get_parameter("turning_linear_speed_mps").as_double();
     cached_params_.turning_angular_gain = this->get_parameter("turning_angular_gain").as_double();
     cached_params_.tracking_angular_gain = this->get_parameter("tracking_angular_gain").as_double();
     cached_params_.occupancy_clear_radius = this->get_parameter("occupancy_clear_radius").as_double();
     cached_params_.costmap_resolution = this->get_parameter("costmap_resolution").as_double();
     cached_params_.vector_field_path_width = this->get_parameter("vector_field_path_width").as_double();
     cached_params_.robot_radius = this->get_parameter("robot_radius").as_double();
+    turning_linear_speed_mps_ = std::max(0.0, cached_params_.turning_linear_speed_mps);
 
     // グローバルフィールドジェネレータ初期化（動的障害物は常に考慮）
     global_field_generator_ = std::make_unique<GlobalFieldGenerator>();
@@ -100,7 +101,7 @@ namespace tvvf_vo_c
     this->declare_parameter("obstacle_mask_topic", "/obstacle_mask");
     this->declare_parameter("occupancy_clear_radius", 0.3);
     this->declare_parameter("orientation_tolerance", 0.2);
-    this->declare_parameter("turning_linear_scale", 0.3);
+    this->declare_parameter("turning_linear_speed_mps", 0.15);
     this->declare_parameter("turning_angular_gain", 2.0);
     this->declare_parameter("tracking_angular_gain", 1.0);
     this->declare_parameter("control_loop_rate", 20.0);

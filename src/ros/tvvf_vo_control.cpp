@@ -108,7 +108,10 @@ namespace tvvf_vo_c
     double angle_diff = math_utils::normalize_angle(target_angle - current_orientation);
 
     const double orientation_tolerance = cached_params_.orientation_tolerance;
-    const double turning_linear_scale = cached_params_.turning_linear_scale;
+    const double turning_linear_speed = std::max(0.0, cached_params_.turning_linear_speed_mps);
+    const double turning_linear_scale = (config_.max_linear_velocity > 1e-9)
+        ? std::clamp(turning_linear_speed / config_.max_linear_velocity, 0.0, 1.0)
+        : 0.0;
     const double turning_angular_gain = cached_params_.turning_angular_gain;
     const double tracking_angular_gain = cached_params_.tracking_angular_gain;
 
