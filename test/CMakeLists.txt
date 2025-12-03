@@ -160,6 +160,44 @@ ament_target_dependencies(test_use_rviz_flag
     Eigen3
 )
 
+ament_add_gtest(test_multi_resolution
+    test_multi_resolution.cpp
+)
+
+target_include_directories(test_multi_resolution PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_multi_resolution
+    ${PROJECT_NAME}_core
+)
+
+ament_target_dependencies(test_multi_resolution
+    rclcpp
+    nav_msgs
+    geometry_msgs
+    Eigen3
+)
+
+ament_add_gtest(test_visualization_overlay
+    test_visualization_overlay.cpp
+)
+
+target_include_directories(test_visualization_overlay PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_visualization_overlay
+    ${PROJECT_NAME}_core
+)
+
+ament_target_dependencies(test_visualization_overlay
+    rclcpp
+    nav_msgs
+    geometry_msgs
+    Eigen3
+)
+
 # カバレッジ計測の設定
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")

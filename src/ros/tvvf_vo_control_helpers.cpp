@@ -110,8 +110,10 @@ namespace tvvf_vo_c
     }
 
     auto region = build_planning_region();
+    const std::optional<Position> focus_point =
+        robot_state_.has_value() ? std::optional<Position>(robot_state_->position) : std::nullopt;
     latest_field_ = global_field_generator_->computeFieldOnTheFly(
-        map_to_use.value(), goal_->position, region);
+        map_to_use.value(), goal_->position, region, focus_point);
     t_after_field = std::chrono::steady_clock::now();
 
     if (!latest_field_.has_value() || latest_field_->width == 0 || latest_field_->height == 0) {
@@ -130,22 +132,12 @@ namespace tvvf_vo_c
 
     double local_speed_limit = config_.max_linear_velocity;
     const auto cost_map = global_field_generator_->getLastCostMap();
-    if (cost_map.has_value() && latest_field_.has_value()) {
-      const double res = std::max(latest_field_->resolution, 1e-6);
-      const int col = static_cast<int>(
-        std::floor((robot_state_->position.x - latest_field_->origin.x) / res));
-      const int row = static_cast<int>(
-        std::floor((robot_state_->position.y - latest_field_->origin.y) / res));
-      if (col >= 0 && row >= 0 &&
-        col < static_cast<int>(cost_map->width) &&
-        row < static_cast<int>(cost_map->height))
-      {
-        const double cell_speed = cost_map->speedAt(col, row);
-        if (cell_speed <= 0.0) {
-          local_speed_limit = 0.0;
-        } else {
-          local_speed_limit = std::min(config_.max_linear_velocity, cell_speed);
-        }
+    if (cost_map.has_value() && latest_field_.has_value() && robot_state_.has_value()) {
+      const double cell_speed = cost_map->speedAtWorld(robot_state_->position);
+      if (cell_speed <= 0.0) {
+        local_speed_limit = 0.0;
+      } else {
+        local_speed_limit = std::min(config_.max_linear_velocity, cell_speed);
       }
     }
 
@@ -210,6 +202,9 @@ namespace tvvf_vo_c
     const double clear_radius = std::max(0.0, cached_params_.occupancy_clear_radius);
     const bool has_robot_state = robot_state_.has_value();
     const double clear_r2 = clear_radius * clear_radius;
+    const bool enable_multi_res =
+      cached_params_.local_costmap_resolution > 0.0 &&
+      cached_params_.local_costmap_radius > 0.0;
 
     // 1) 足元クリア
     if (has_robot_state && clear_radius > 0.0 &&
@@ -235,7 +230,7 @@ namespace tvvf_vo_c
     // 2) マスク適用
     if (!obstacle_mask_.has_value()) {
       const double override_res = cached_params_.costmap_resolution;
-      if (override_res > 1e-6 &&
+      if (!enable_multi_res && override_res > 1e-6 &&
         std::abs(override_res - merged.info.resolution) > 1e-6)
       {
         merged = resample_occupancy_grid(merged, override_res);
@@ -299,7 +294,7 @@ namespace tvvf_vo_c
 
     // 3) 解像度変更（最後にまとめて）
     const double override_res = cached_params_.costmap_resolution;
-    if (override_res > 1e-6 &&
+    if (!enable_multi_res && override_res > 1e-6 &&
       std::abs(override_res - merged.info.resolution) > 1e-6)
     {
       merged = resample_occupancy_grid(merged, override_res);

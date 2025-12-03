@@ -25,12 +25,19 @@ namespace tvvf_vo_c
     cached_params_.tracking_angular_gain = this->get_parameter("tracking_angular_gain").as_double();
     cached_params_.occupancy_clear_radius = this->get_parameter("occupancy_clear_radius").as_double();
     cached_params_.costmap_resolution = this->get_parameter("costmap_resolution").as_double();
+    cached_params_.local_costmap_resolution = this->get_parameter("local_costmap_resolution").as_double();
+    cached_params_.local_costmap_radius = this->get_parameter("local_costmap_radius").as_double();
     cached_params_.vector_field_path_width = this->get_parameter("vector_field_path_width").as_double();
     cached_params_.robot_radius = this->get_parameter("robot_radius").as_double();
 
     // グローバルフィールドジェネレータ初期化（動的障害物は常に考慮）
     global_field_generator_ = std::make_unique<GlobalFieldGenerator>();
     global_field_generator_->setCostMapSettings(cost_map_settings_);
+    GlobalFieldGenerator::MultiResolutionSettings multi_settings;
+    multi_settings.global_resolution = cached_params_.costmap_resolution;
+    multi_settings.local_resolution = cached_params_.local_costmap_resolution;
+    multi_settings.local_radius = cached_params_.local_costmap_radius;
+    global_field_generator_->setMultiResolutionSettings(multi_settings);
 
     velocity_optimizer_ = std::make_unique<SmoothVelocityOptimizer>(build_optimizer_options());
 
@@ -115,6 +122,8 @@ namespace tvvf_vo_c
     this->declare_parameter("costmap_clearance_epsilon", 0.1);
     this->declare_parameter("costmap_max_clearance", 5.0);
     this->declare_parameter("costmap_resolution", 0.0);
+    this->declare_parameter("local_costmap_resolution", 0.0);
+    this->declare_parameter("local_costmap_radius", 0.0);
     this->declare_parameter("optimizer_goal_weight", 1.0);
     this->declare_parameter("optimizer_smooth_weight", 4.0);
     this->declare_parameter("optimizer_max_linear_acceleration", 0.5);

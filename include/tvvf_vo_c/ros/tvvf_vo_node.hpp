@@ -53,6 +53,8 @@ private:
         double tracking_angular_gain{0.0};
         double occupancy_clear_radius{0.0};
         double costmap_resolution{0.0};
+        double local_costmap_resolution{0.0};
+        double local_costmap_radius{0.0};
         double vector_field_path_width{0.0};
         double robot_radius{0.0};
     } cached_params_;
@@ -146,6 +148,8 @@ public:
         const CostMapResult& cost_map,
         const VectorField& field,
         const std::string& frame_id) const;
+    geometry_msgs::msg::PoseArray debug_build_vector_pose_array(
+        const VectorField& field) const { return build_vector_pose_array(field); }
     void debug_set_robot_position(const Position & pos) {
       robot_state_ = RobotState(pos, Velocity(0.0, 0.0), 0.0, 0.0, 0.0, 0.0);
     }
@@ -214,17 +218,19 @@ private:
     std::array<double, 2> compute_navigation_vector(
         const std::array<double, 2>& base_vector,
         const Position& world_pos) const;
-    nav_msgs::msg::OccupancyGrid build_costmap_grid(
-        const CostMapResult& cost_map,
-        const VectorField& field,
-        const std::string& frame_id) const;
-    nav_msgs::msg::OccupancyGrid resample_occupancy_grid(
-        const nav_msgs::msg::OccupancyGrid& src,
-        double new_resolution) const;
-    void publish_costmap_visualization(
-        const CostMapResult& cost_map,
-        const VectorField& field,
-        const std::string& frame_id);
+        nav_msgs::msg::OccupancyGrid build_costmap_grid(
+            const CostMapResult& cost_map,
+            const VectorField& field,
+            const std::string& frame_id) const;
+        nav_msgs::msg::OccupancyGrid resample_occupancy_grid(
+            const nav_msgs::msg::OccupancyGrid& src,
+            double new_resolution) const;
+        geometry_msgs::msg::PoseArray build_vector_pose_array(
+            const VectorField& field) const;
+        void publish_costmap_visualization(
+            const CostMapResult& cost_map,
+            const VectorField& field,
+            const std::string& frame_id);
 
     bool should_visualize_vector(const std::array<double, 2>& vector) const;
     bool is_valid_position(const Position& position) const;

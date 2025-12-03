@@ -43,6 +43,10 @@ void CostMapBuilder::build(const nav_msgs::msg::OccupancyGrid& map,
     result.width = map.info.width;
     result.height = map.info.height;
     result.resolution = map.info.resolution;
+    result.origin = Position(
+        map.info.origin.position.x,
+        map.info.origin.position.y);
+    result.overlays.clear();
 
     if (result.width == 0 || result.height == 0) {
         result.speed_layer.clear();

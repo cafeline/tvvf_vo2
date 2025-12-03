@@ -86,7 +86,8 @@ GlobalFieldGenerator::GlobalFieldGenerator()
       static_field_computed_(false),
       cost_map_settings_(),
       cost_map_builder_(cost_map_settings_),
-      last_cost_map_result_(std::nullopt) {
+      last_cost_map_result_(std::nullopt),
+      multi_res_settings_() {
     fast_marching_ = std::make_unique<FastMarching>();
 }
 
@@ -103,44 +104,16 @@ void GlobalFieldGenerator::setCostMapSettings(const CostMapSettings& settings) {
 // 静的場の事前計算
 void GlobalFieldGenerator::precomputeStaticField(const nav_msgs::msg::OccupancyGrid& map,
                                                   const Position& goal,
-                                                  const std::optional<FieldRegion>& region) {
-    nav_msgs::msg::OccupancyGrid cropped_map;
-    const nav_msgs::msg::OccupancyGrid* map_ptr = &map;
-    std::optional<FieldRegion> applied_region = std::nullopt;
-
-    if (region.has_value()) {
-        if (auto cropped = cropOccupancyGrid(map, region.value())) {
-            cropped_map = std::move(cropped->map);
-            applied_region = cropped->region;
-            map_ptr = &cropped_map;
-        }
-    }
-
-    if (!last_cost_map_result_) {
-        last_cost_map_result_.emplace();
-    }
-    cost_map_builder_.build(*map_ptr, *last_cost_map_result_);
-    if (!last_cost_map_result_->isValid()) {
-        last_cost_map_result_.reset();
-        static_field_computed_ = false;
-        return;
-    }
-
-    // Fast Marching Methodを使用して静的場を計算
-    fast_marching_->initializeFromOccupancyGrid(*map_ptr, last_cost_map_result_->speed_layer);
-    fast_marching_->computeDistanceField(goal);
-    fast_marching_->generateVectorField();
-    
-    // 静的場を保存
-    static_field_ = fast_marching_->getField();
-    static_field_.region = applied_region;
-    static_field_computed_ = true;
+                                                  const std::optional<FieldRegion>& region,
+                                                  const std::optional<Position>& focus) {
+    computeFieldOnTheFly(map, goal, region, focus);
 }
 
 VectorField GlobalFieldGenerator::computeFieldOnTheFly(
     const nav_msgs::msg::OccupancyGrid& map,
     const Position& goal,
-    const std::optional<FieldRegion>& region) {
+    const std::optional<FieldRegion>& region,
+    const std::optional<Position>& focus) {
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -156,6 +129,16 @@ VectorField GlobalFieldGenerator::computeFieldOnTheFly(
         }
     }
 
+    const nav_msgs::msg::OccupancyGrid* overlay_source = map_ptr;
+
+    nav_msgs::msg::OccupancyGrid resampled_global;
+    if (multi_res_settings_.global_resolution > 1e-6 &&
+        std::abs(multi_res_settings_.global_resolution - map_ptr->info.resolution) > 1e-6)
+    {
+        resampled_global = resampleOccupancyGrid(*map_ptr, multi_res_settings_.global_resolution);
+        map_ptr = &resampled_global;
+    }
+
     if (map_ptr->info.width == 0 || map_ptr->info.height == 0) {
         static_field_computed_ = false;
         return VectorField();
@@ -165,6 +148,7 @@ VectorField GlobalFieldGenerator::computeFieldOnTheFly(
         last_cost_map_result_.emplace();
     }
     cost_map_builder_.build(*map_ptr, *last_cost_map_result_);
+    last_cost_map_result_->overlays.clear();
     if (!last_cost_map_result_->isValid()) {
         last_cost_map_result_.reset();
         static_field_computed_ = false;
@@ -177,6 +161,45 @@ VectorField GlobalFieldGenerator::computeFieldOnTheFly(
 
     static_field_ = fast_marching_->getField();
     static_field_.region = applied_region;
+    static_field_.clearOverlays();
+
+    if (multi_res_settings_.enabled() && focus.has_value()) {
+        if (auto local_patch = buildLocalPatch(*overlay_source, focus.value())) {
+            CostMapResult local_cost;
+            cost_map_builder_.build(*local_patch, local_cost);
+            if (local_cost.isValid()) {
+                last_cost_map_result_->overlays.push_back(local_cost.toLayer());
+
+                const FieldRegion patch_region(
+                    Position(local_patch->info.origin.position.x, local_patch->info.origin.position.y),
+                    Position(
+                        local_patch->info.origin.position.x +
+                            static_cast<double>(local_patch->info.width) * local_patch->info.resolution,
+                        local_patch->info.origin.position.y +
+                            static_cast<double>(local_patch->info.height) * local_patch->info.resolution));
+
+                // ゴールが外でも、パッチ内部へクランプした目標で高解像度ベクトル場を生成
+                Position clamped_goal(
+                    std::clamp(goal.x, patch_region.min.x + local_patch->info.resolution * 0.5,
+                               patch_region.max.x - local_patch->info.resolution * 0.5),
+                    std::clamp(goal.y, patch_region.min.y + local_patch->info.resolution * 0.5,
+                               patch_region.max.y - local_patch->info.resolution * 0.5));
+
+                FastMarching local_fmm;
+                local_fmm.setOccupancyThresholds(
+                    cost_map_settings_.occupied_threshold,
+                    cost_map_settings_.free_threshold);
+                local_fmm.initializeFromOccupancyGrid(*local_patch, local_cost.speed_layer);
+                local_fmm.computeDistanceField(clamped_goal);
+                local_fmm.generateVectorField();
+
+                VectorField local_field = local_fmm.getField();
+                local_field.region = patch_region;
+                static_field_.addOverlay(local_field);
+            }
+        }
+    }
+
     static_field_computed_ = true;
 
     auto end = std::chrono::high_resolution_clock::now();
@@ -195,13 +218,121 @@ std::array<double, 2> GlobalFieldGenerator::getVelocityAt(const Position& positi
         return {0.0, 0.0};
     }
 
-    auto [grid_x, grid_y] = static_field_.worldToGrid(position);
-    if (grid_x < 0 || grid_x >= static_field_.width ||
-        grid_y < 0 || grid_y >= static_field_.height) {
-        return {0.0, 0.0};
+    return static_field_.getVector(position);
+}
+
+nav_msgs::msg::OccupancyGrid GlobalFieldGenerator::resampleOccupancyGrid(
+    const nav_msgs::msg::OccupancyGrid& src,
+    double new_resolution) const
+{
+    nav_msgs::msg::OccupancyGrid out = src;
+    if (new_resolution <= 0.0 ||
+        std::abs(new_resolution - src.info.resolution) < 1e-9)
+    {
+        return out;
     }
 
-    return static_field_.vectors[grid_y][grid_x];
+    const double size_x = static_cast<double>(src.info.width) * src.info.resolution;
+    const double size_y = static_cast<double>(src.info.height) * src.info.resolution;
+    const uint32_t new_width = static_cast<uint32_t>(std::ceil(size_x / new_resolution));
+    const uint32_t new_height = static_cast<uint32_t>(std::ceil(size_y / new_resolution));
+
+    out.info.resolution = new_resolution;
+    out.info.width = new_width;
+    out.info.height = new_height;
+    out.data.assign(static_cast<size_t>(new_width) * new_height, -1);
+
+    const double origin_x = src.info.origin.position.x;
+    const double origin_y = src.info.origin.position.y;
+    const double src_res = src.info.resolution;
+
+    for (uint32_t row = 0; row < new_height; ++row) {
+        for (uint32_t col = 0; col < new_width; ++col) {
+            const double wx = origin_x + (static_cast<double>(col) + 0.5) * new_resolution;
+            const double wy = origin_y + (static_cast<double>(row) + 0.5) * new_resolution;
+            const int src_col = static_cast<int>(std::floor((wx - origin_x) / src_res));
+            const int src_row = static_cast<int>(std::floor((wy - origin_y) / src_res));
+            if (src_col < 0 || src_row < 0 ||
+                src_col >= static_cast<int>(src.info.width) ||
+                src_row >= static_cast<int>(src.info.height)) {
+                continue;
+            }
+            const size_t src_idx =
+              static_cast<size_t>(src_row) * src.info.width + static_cast<size_t>(src_col);
+            out.data[static_cast<size_t>(row) * new_width + static_cast<size_t>(col)] =
+              src.data[src_idx];
+        }
+    }
+    return out;
+}
+
+std::optional<nav_msgs::msg::OccupancyGrid> GlobalFieldGenerator::buildLocalPatch(
+    const nav_msgs::msg::OccupancyGrid& map,
+    const Position& focus) const
+{
+    if (!multi_res_settings_.enabled()) {
+        return std::nullopt;
+    }
+    if (map.info.width == 0 || map.info.height == 0) {
+        return std::nullopt;
+    }
+
+    const double radius = multi_res_settings_.local_radius;
+    const double patch_res = multi_res_settings_.local_resolution;
+    FieldRegion desired(
+        Position(focus.x - radius, focus.y - radius),
+        Position(focus.x + radius, focus.y + radius));
+
+    const double map_res = map.info.resolution;
+    FieldRegion map_bounds(
+        Position(map.info.origin.position.x, map.info.origin.position.y),
+        Position(
+            map.info.origin.position.x + static_cast<double>(map.info.width) * map_res,
+            map.info.origin.position.y + static_cast<double>(map.info.height) * map_res));
+
+    FieldRegion clamped;
+    clamped.min.x = std::max(desired.min.x, map_bounds.min.x);
+    clamped.min.y = std::max(desired.min.y, map_bounds.min.y);
+    clamped.max.x = std::min(desired.max.x, map_bounds.max.x);
+    clamped.max.y = std::min(desired.max.y, map_bounds.max.y);
+
+    if (!clamped.is_valid() || clamped.min.x >= clamped.max.x || clamped.min.y >= clamped.max.y) {
+        return std::nullopt;
+    }
+
+    nav_msgs::msg::OccupancyGrid patch;
+    patch.info.resolution = patch_res;
+    patch.info.origin.position.x = clamped.min.x;
+    patch.info.origin.position.y = clamped.min.y;
+    patch.info.width = static_cast<uint32_t>(
+        std::ceil((clamped.max.x - clamped.min.x) / patch_res));
+    patch.info.height = static_cast<uint32_t>(
+        std::ceil((clamped.max.y - clamped.min.y) / patch_res));
+    patch.data.assign(static_cast<size_t>(patch.info.width) * patch.info.height, -1);
+
+    const double origin_x = map.info.origin.position.x;
+    const double origin_y = map.info.origin.position.y;
+    for (uint32_t row = 0; row < patch.info.height; ++row) {
+        for (uint32_t col = 0; col < patch.info.width; ++col) {
+            const double wx = patch.info.origin.position.x +
+                (static_cast<double>(col) + 0.5) * patch_res;
+            const double wy = patch.info.origin.position.y +
+                (static_cast<double>(row) + 0.5) * patch_res;
+            const int src_col = static_cast<int>(std::floor((wx - origin_x) / map_res));
+            const int src_row = static_cast<int>(std::floor((wy - origin_y) / map_res));
+            if (src_col < 0 || src_row < 0 ||
+                src_col >= static_cast<int>(map.info.width) ||
+                src_row >= static_cast<int>(map.info.height)) {
+                continue;
+            }
+            const size_t src_idx =
+              static_cast<size_t>(src_row) * map.info.width + static_cast<size_t>(src_col);
+            patch.data[static_cast<size_t>(row) * patch.info.width + static_cast<size_t>(col)] =
+              map.data[src_idx];
+        }
+    }
+
+    return patch;
 }
 
 }  // namespace tvvf_vo_c

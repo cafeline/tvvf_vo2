@@ -14,51 +14,47 @@ namespace tvvf_vo_c
     // PoseArray のみで、特にクリア処理は不要
   }
 
-  void TVVFVONode::publish_combined_field_visualization(const VectorField& field)
+  geometry_msgs::msg::PoseArray TVVFVONode::build_vector_pose_array(
+      const VectorField& field) const
   {
-    if (!use_rviz_) {
-      return;
-    }
-    try
-    {
-      const auto now = this->now();
-      const auto steady_now = steady_clock_.now();
-      const double elapsed = (steady_now - last_vector_field_publish_time_).seconds();
-      if (elapsed < VECTOR_FIELD_PUBLISH_INTERVAL_SEC) {
-        return;
+    geometry_msgs::msg::PoseArray pose_array;
+    pose_array.header.frame_id = cached_params_.global_frame;
+    pose_array.header.stamp = this->now();
+
+    auto is_in_overlay = [&](const Position& pos) {
+      for (const auto& overlay : field.overlays) {
+        FieldRegion region = overlay.region.has_value()
+            ? overlay.region.value()
+            : FieldRegion(
+                Position(overlay.origin.x, overlay.origin.y),
+                Position(
+                  overlay.origin.x +
+                    static_cast<double>(overlay.width) * overlay.resolution,
+                  overlay.origin.y +
+                    static_cast<double>(overlay.height) * overlay.resolution));
+        if (region.contains(pos)) {
+          return true;
+        }
       }
+      return false;
+    };
 
-      geometry_msgs::msg::PoseArray pose_array;
-      const std::string global_frame = cached_params_.global_frame;
-
-      pose_array.header.frame_id = global_frame;
-      pose_array.header.stamp = now;
-
-      // ベクトル場と同じ解像度ですべてのセルを追加
-      for (int y = 0; y < field.height; ++y)
-      {
-        for (int x = 0; x < field.width; ++x)
-        {
-          // ワールド座標に変換
-          const Position world_pos = field.gridToWorld(x, y);
-
-          // 合成ベクトルを計算（制御と同じ計算を利用）
-          const auto combined_vector = compute_navigation_vector(field.vectors[y][x], world_pos);
-
-          if (!is_valid_position(world_pos) || !is_valid_vector(combined_vector)) {
-            RCLCPP_WARN_THROTTLE(
-                this->get_logger(), *this->get_clock(), 2000,
-                "Skipping invalid vector field sample (pos=(%.3f, %.3f), vec=(%.3f, %.3f))",
-                world_pos.x, world_pos.y, combined_vector[0], combined_vector[1]);
+    auto append_samples = [&](const VectorField& vf, bool skip_overlay_region) {
+      for (int y = 0; y < vf.height; ++y) {
+        for (int x = 0; x < vf.width; ++x) {
+          const Position world_pos = vf.gridToWorld(x, y);
+          if (skip_overlay_region && is_in_overlay(world_pos)) {
             continue;
           }
-
-          // ベクトルが小さすぎる場合はスキップ
+          const auto combined_vector =
+            compute_navigation_vector(vf.vectors[static_cast<size_t>(y)][static_cast<size_t>(x)],
+                                      world_pos);
+          if (!is_valid_position(world_pos) || !is_valid_vector(combined_vector)) {
+            continue;
+          }
           if (!should_visualize_vector(combined_vector)) {
             continue;
           }
-
-          // PoseArrayへ追加（RVizで軽量表示用）
           geometry_msgs::msg::Pose pose;
           pose.position.x = world_pos.x;
           pose.position.y = world_pos.y;
@@ -70,6 +66,69 @@ namespace tvvf_vo_c
           pose_array.poses.push_back(pose);
         }
       }
+    };
+
+    // base field at its own resolution, skipping overlay regions
+    append_samples(field, !field.overlays.empty());
+
+    // overlay fields at their own resolutions
+    for (const auto& overlay : field.overlays) {
+      append_samples(overlay, false);
+    }
+
+    // if no overlays but local_costmap_resolutionが指定されている場合は、より細かいサンプリングを上書きで追加
+    if (field.overlays.empty() && cached_params_.local_costmap_resolution > 1e-6 &&
+        cached_params_.local_costmap_resolution < field.resolution) {
+      const double res = cached_params_.local_costmap_resolution;
+      const double size_x = static_cast<double>(field.width) * field.resolution;
+      const double size_y = static_cast<double>(field.height) * field.resolution;
+      const uint32_t width = static_cast<uint32_t>(std::ceil(size_x / res));
+      const uint32_t height = static_cast<uint32_t>(std::ceil(size_y / res));
+      const double origin_x = field.origin.x;
+      const double origin_y = field.origin.y;
+      for (uint32_t row = 0; row < height; ++row) {
+        for (uint32_t col = 0; col < width; ++col) {
+          const Position world_pos(
+            origin_x + (static_cast<double>(col) + 0.5) * res,
+            origin_y + (static_cast<double>(row) + 0.5) * res);
+          const auto combined_vector =
+            compute_navigation_vector(field.getVector(world_pos), world_pos);
+          if (!is_valid_position(world_pos) || !is_valid_vector(combined_vector)) {
+            continue;
+          }
+          if (!should_visualize_vector(combined_vector)) {
+            continue;
+          }
+          geometry_msgs::msg::Pose pose;
+          pose.position.x = world_pos.x;
+          pose.position.y = world_pos.y;
+          pose.position.z = 0.0;
+          const double yaw = std::atan2(combined_vector[1], combined_vector[0]);
+          tf2::Quaternion q;
+          q.setRPY(0.0, 0.0, yaw);
+          pose.orientation = tf2::toMsg(q);
+          pose_array.poses.push_back(pose);
+        }
+      }
+    }
+
+    return pose_array;
+  }
+
+  void TVVFVONode::publish_combined_field_visualization(const VectorField& field)
+  {
+    if (!use_rviz_) {
+      return;
+    }
+    try
+    {
+      const auto steady_now = steady_clock_.now();
+      const double elapsed = (steady_now - last_vector_field_publish_time_).seconds();
+      if (elapsed < VECTOR_FIELD_PUBLISH_INTERVAL_SEC) {
+        return;
+      }
+
+      auto pose_array = build_vector_pose_array(field);
 
       if (vector_field_pose_pub_ && !pose_array.poses.empty()) {
         vector_field_pose_pub_->publish(pose_array);
@@ -106,31 +165,52 @@ namespace tvvf_vo_c
         : frame_id;
     grid.header.stamp = this->now();
 
-    grid.info.width = cost_map.width;
-    grid.info.height = cost_map.height;
-    grid.info.resolution = cost_map.resolution;
-    grid.info.origin.position.x = field.origin.x;
-    grid.info.origin.position.y = field.origin.y;
+    double target_resolution = cost_map.resolution;
+    for (const auto& overlay : cost_map.overlays) {
+      if (overlay.isValid()) {
+        target_resolution = std::min(target_resolution, overlay.resolution);
+      }
+    }
+    target_resolution = std::max(target_resolution, 1e-6);
+
+    const double size_x =
+      static_cast<double>(cost_map.width) * cost_map.resolution;
+    const double size_y =
+      static_cast<double>(cost_map.height) * cost_map.resolution;
+    grid.info.width = static_cast<uint32_t>(std::ceil(size_x / target_resolution));
+    grid.info.height = static_cast<uint32_t>(std::ceil(size_y / target_resolution));
+    grid.info.resolution = target_resolution;
+    grid.info.origin.position.x = cost_map.origin.x;
+    grid.info.origin.position.y = cost_map.origin.y;
     grid.info.origin.orientation.w = 1.0;
 
     grid.data.assign(static_cast<size_t>(grid.info.width) * grid.info.height, 0);
 
     const double max_clearance = std::max(cost_map_settings_.max_clearance, 1e-6);
-    for (uint32_t y = 0; y < cost_map.height; ++y) {
-      for (uint32_t x = 0; x < cost_map.width; ++x) {
-        const size_t idx = static_cast<size_t>(y) * cost_map.width + x;
-        double clearance = cost_map.clearance_layer[idx];
+    const double origin_x = grid.info.origin.position.x;
+    const double origin_y = grid.info.origin.position.y;
+    for (uint32_t row = 0; row < grid.info.height; ++row) {
+      for (uint32_t col = 0; col < grid.info.width; ++col) {
+        const double wx = origin_x + (static_cast<double>(col) + 0.5) * target_resolution;
+        const double wy = origin_y + (static_cast<double>(row) + 0.5) * target_resolution;
+        const Position p(wx, wy);
+
+        double clearance = cost_map.clearanceAtWorld(p);
         if (!std::isfinite(clearance)) {
           clearance = 0.0;
         }
         clearance = std::clamp(clearance, 0.0, max_clearance);
         double normalized = 1.0 - (clearance / max_clearance);
         int cost = static_cast<int>(std::lround(normalized * 100.0));
-        if (idx < cost_map.speed_layer.size() && cost_map.speed_layer[idx] <= 0.0) {
+
+        const double speed = cost_map.speedAtWorld(p);
+        if (speed <= 0.0) {
           cost = 100;
         }
+
         cost = std::clamp(cost, 0, 100);
-        grid.data[idx] = static_cast<int8_t>(cost);
+        grid.data[static_cast<size_t>(row) * grid.info.width + static_cast<size_t>(col)] =
+          static_cast<int8_t>(cost);
       }
     }
 

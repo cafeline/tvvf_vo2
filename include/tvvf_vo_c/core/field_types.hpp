@@ -74,7 +74,8 @@ public:
     std::optional<FieldRegion> region;  // 計算対象領域
     std::vector<GridRowView> grid;  // 2Dビュー（実体は1次元ストレージ）
     std::vector<VectorRowView> vectors;  // ベクトル場ビュー
-    
+    std::vector<VectorField> overlays;   // 高解像度オーバーレイ
+
     VectorField();
     VectorField(const VectorField& other);
     VectorField(VectorField&& other) noexcept;
@@ -104,15 +105,52 @@ public:
     }
     
     std::array<double, 2> getVector(const Position& pos) const {
-        auto [x, y] = worldToGrid(pos);
-        if (x >= 0 && x < width && y >= 0 && y < height) {
-            return vectors[static_cast<size_t>(y)][static_cast<size_t>(x)];
+        const VectorField* selected = nullptr;
+        double best_resolution = std::numeric_limits<double>::infinity();
+
+        auto select_if_contains = [&](const VectorField& candidate) {
+            FieldRegion candidate_region;
+            if (candidate.region.has_value()) {
+                candidate_region = candidate.region.value();
+            } else {
+                candidate_region = FieldRegion(
+                    Position(candidate.origin.x,
+                             candidate.origin.y),
+                    Position(
+                        candidate.origin.x +
+                            static_cast<double>(candidate.width) * candidate.resolution,
+                        candidate.origin.y +
+                            static_cast<double>(candidate.height) * candidate.resolution));
+            }
+            if (!candidate_region.contains(pos)) {
+                return;
+            }
+            if (candidate.resolution < best_resolution) {
+                selected = &candidate;
+                best_resolution = candidate.resolution;
+            }
+        };
+
+        for (const auto& overlay : overlays) {
+            select_if_contains(overlay);
+        }
+        select_if_contains(*this);
+
+        if (!selected) {
+            return {0.0, 0.0};
+        }
+
+        auto [x, y] = selected->worldToGrid(pos);
+        if (x >= 0 && x < selected->width && y >= 0 && y < selected->height) {
+            return selected->vectors[static_cast<size_t>(y)][static_cast<size_t>(x)];
         }
         return {0.0, 0.0};
     }
 
     void resize(int new_width, int new_height);
     void set_origin(const Position& new_origin) { origin = new_origin; }
+    void addOverlay(const VectorField& overlay) { overlays.push_back(overlay); }
+    void clearOverlays() { overlays.clear(); }
 
 private:
     std::vector<GridCell> grid_storage_;
@@ -130,6 +168,7 @@ inline VectorField::VectorField(const VectorField& other)
       resolution(other.resolution),
       origin(other.origin),
       region(other.region),
+      overlays(other.overlays),
       grid_storage_(other.grid_storage_),
       vector_storage_(other.vector_storage_) {
     rebuild_row_views();
@@ -141,6 +180,7 @@ inline VectorField::VectorField(VectorField&& other) noexcept
       resolution(other.resolution),
       origin(other.origin),
       region(std::move(other.region)),
+      overlays(std::move(other.overlays)),
       grid_storage_(std::move(other.grid_storage_)),
       vector_storage_(std::move(other.vector_storage_)) {
     rebuild_row_views();
@@ -153,6 +193,7 @@ inline VectorField& VectorField::operator=(const VectorField& other) {
         resolution = other.resolution;
         origin = other.origin;
         region = other.region;
+        overlays = other.overlays;
         grid_storage_ = other.grid_storage_;
         vector_storage_ = other.vector_storage_;
         rebuild_row_views();
@@ -167,6 +208,7 @@ inline VectorField& VectorField::operator=(VectorField&& other) noexcept {
         resolution = other.resolution;
         origin = other.origin;
         region = std::move(other.region);
+        overlays = std::move(other.overlays);
         grid_storage_ = std::move(other.grid_storage_);
         vector_storage_ = std::move(other.vector_storage_);
         rebuild_row_views();
