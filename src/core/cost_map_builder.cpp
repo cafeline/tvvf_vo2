@@ -160,4 +160,46 @@ CostMapResult CostMapBuilder::build(const nav_msgs::msg::OccupancyGrid& map) con
     return result;
 }
 
+void CostMapBuilder::apply_escape_speed(const nav_msgs::msg::OccupancyGrid& map,
+                                        const Position& robot_position,
+                                        CostMapResult& result,
+                                        double escape_radius,
+                                        double escape_speed_min) const
+{
+    const size_t expected_size = static_cast<size_t>(result.width) * result.height;
+    if (!result.isValid() || result.speed_layer.size() != expected_size) {
+        return;
+    }
+    if (map.info.width != result.width || map.info.height != result.height) {
+        return;
+    }
+    const double radius_sq = escape_radius * escape_radius;
+    if (radius_sq <= 0.0 || expected_size == 0) {
+        return;
+    }
+
+    const double resolution = std::max(result.resolution, 1e-6);
+    const double origin_x = map.info.origin.position.x;
+    const double origin_y = map.info.origin.position.y;
+    const double escape_speed = std::max(settings_.min_speed, escape_speed_min);
+    const bool has_obstacle_mask = obstacle_mask_buffer_.size() == expected_size;
+
+    for (uint32_t row = 0; row < result.height; ++row) {
+        for (uint32_t col = 0; col < result.width; ++col) {
+            const size_t idx = static_cast<size_t>(row) * result.width + col;
+            if (has_obstacle_mask && obstacle_mask_buffer_[idx]) {
+                continue;
+            }
+
+            const double wx = origin_x + (static_cast<double>(col) + 0.5) * resolution;
+            const double wy = origin_y + (static_cast<double>(row) + 0.5) * resolution;
+            const double dx = wx - robot_position.x;
+            const double dy = wy - robot_position.y;
+            if (dx * dx + dy * dy <= radius_sq) {
+                result.speed_layer[idx] = escape_speed;
+            }
+        }
+    }
+}
+
 }  // namespace tvvf_vo_c

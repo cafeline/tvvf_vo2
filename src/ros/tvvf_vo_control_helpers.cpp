@@ -111,8 +111,20 @@ namespace tvvf_vo_c
     }
 
     auto region = build_planning_region();
+
+    std::optional<EscapeSpeedOverride> escape_override = std::nullopt;
+    if (robot_state_.has_value()) {
+      EscapeSpeedOverride override_params;
+      override_params.center = robot_state_->position;
+      override_params.radius = std::max(cached_params_.robot_radius, cached_params_.occupancy_clear_radius);
+      override_params.speed_min = cost_map_settings_.escape_speed_min;
+      if (override_params.radius > 0.0 && override_params.speed_min > 0.0) {
+        escape_override = override_params;
+      }
+    }
+
     latest_field_ = global_field_generator_->computeFieldOnTheFly(
-        map_to_use.value(), goal_->position, region);
+        map_to_use.value(), goal_->position, region, escape_override);
     t_after_field = std::chrono::steady_clock::now();
 
     if (!latest_field_.has_value() || latest_field_->width == 0 || latest_field_->height == 0) {

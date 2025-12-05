@@ -28,6 +28,7 @@ tvvf_vo_c_node:
     costmap_max_speed: 1.0
     costmap_clearance_epsilon: 0.1
     costmap_max_clearance: 5.0
+    costmap_escape_speed_min: 0.05
 
     # オプティマイザ
     optimizer_goal_weight: 1.0

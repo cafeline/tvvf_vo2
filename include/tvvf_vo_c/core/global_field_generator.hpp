@@ -14,6 +14,12 @@
 
 namespace tvvf_vo_c {
 
+struct EscapeSpeedOverride {
+    Position center;
+    double radius{0.0};
+    double speed_min{0.0};
+};
+
 class GlobalFieldGenerator {
 public:
     GlobalFieldGenerator();
@@ -30,7 +36,8 @@ public:
     // 毎フレームのオンデマンド生成（静的事前計算なし）
     VectorField computeFieldOnTheFly(const nav_msgs::msg::OccupancyGrid& map,
                                      const Position& goal,
-                                     const std::optional<FieldRegion>& region = std::nullopt);
+                                     const std::optional<FieldRegion>& region = std::nullopt,
+                                     const std::optional<EscapeSpeedOverride>& escape_override = std::nullopt);
     
     // パフォーマンス計測用
     double getLastComputationTime() const;

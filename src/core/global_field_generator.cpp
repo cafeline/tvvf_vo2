@@ -140,7 +140,8 @@ void GlobalFieldGenerator::precomputeStaticField(const nav_msgs::msg::OccupancyG
 VectorField GlobalFieldGenerator::computeFieldOnTheFly(
     const nav_msgs::msg::OccupancyGrid& map,
     const Position& goal,
-    const std::optional<FieldRegion>& region) {
+    const std::optional<FieldRegion>& region,
+    const std::optional<EscapeSpeedOverride>& escape_override) {
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -165,6 +166,16 @@ VectorField GlobalFieldGenerator::computeFieldOnTheFly(
         last_cost_map_result_.emplace();
     }
     cost_map_builder_.build(*map_ptr, *last_cost_map_result_);
+    if (escape_override.has_value() && last_cost_map_result_->isValid()) {
+        const double radius = std::max(0.0, escape_override->radius);
+        const double speed_min = std::max(0.0, escape_override->speed_min);
+        cost_map_builder_.apply_escape_speed(
+            *map_ptr,
+            escape_override->center,
+            *last_cost_map_result_,
+            radius,
+            speed_min);
+    }
     if (!last_cost_map_result_->isValid()) {
         last_cost_map_result_.reset();
         static_field_computed_ = false;

@@ -6,6 +6,7 @@
 #define TVVF_VO_C_CORE_COST_MAP_BUILDER_HPP_
 
 #include <nav_msgs/msg/occupancy_grid.hpp>
+#include "tvvf_vo_c/core/types.hpp"
 #include <cstdint>
 #include <vector>
 
@@ -19,6 +20,7 @@ struct CostMapSettings {
     double max_speed{1.0};
     double clearance_epsilon{0.1};
     double max_clearance{5.0};
+    double escape_speed_min{0.05};
 };
 
 struct CostMapResult {
@@ -59,6 +61,11 @@ public:
 
     void build(const nav_msgs::msg::OccupancyGrid& map, CostMapResult& result) const;
     CostMapResult build(const nav_msgs::msg::OccupancyGrid& map) const;
+    void apply_escape_speed(const nav_msgs::msg::OccupancyGrid& map,
+                            const Position& robot_position,
+                            CostMapResult& result,
+                            double escape_radius,
+                            double escape_speed_min) const;
 
 private:
     CostMapSettings settings_;

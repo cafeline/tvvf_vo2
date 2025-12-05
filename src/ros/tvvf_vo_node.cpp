@@ -115,6 +115,7 @@ namespace tvvf_vo_c
     this->declare_parameter("costmap_max_speed", 1.0);
     this->declare_parameter("costmap_clearance_epsilon", 0.1);
     this->declare_parameter("costmap_max_clearance", 5.0);
+    this->declare_parameter("costmap_escape_speed_min", 0.05);
     this->declare_parameter("costmap_resolution", 0.0);
     this->declare_parameter("optimizer_goal_weight", 1.0);
     this->declare_parameter("optimizer_smooth_weight", 4.0);
@@ -138,6 +139,14 @@ namespace tvvf_vo_c
     cost_map_settings_.min_speed = std::max(0.0, this->get_parameter("costmap_min_speed").as_double());
     cost_map_settings_.max_speed = std::max(cost_map_settings_.min_speed,
         this->get_parameter("costmap_max_speed").as_double());
+    {
+      const double escape_speed_param =
+          std::max(0.0, this->get_parameter("costmap_escape_speed_min").as_double());
+      cost_map_settings_.escape_speed_min = std::clamp(
+          escape_speed_param,
+          cost_map_settings_.min_speed,
+          cost_map_settings_.max_speed);
+    }
     cost_map_settings_.clearance_epsilon =
         std::max(0.01, this->get_parameter("costmap_clearance_epsilon").as_double());
     cost_map_settings_.max_clearance =
