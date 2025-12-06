@@ -1,6 +1,8 @@
 #include "tvvf_vo_c/ros/tvvf_vo_node.hpp"
 #include <chrono>
 #include <algorithm>
+#include <functional>
+#include <cmath>
 
 namespace tvvf_vo_c
 {
@@ -81,6 +83,8 @@ namespace tvvf_vo_c
     control_timer_ = this->create_wall_timer(
         control_period, std::bind(&TVVFVONode::control_loop, this));
 
+    parameter_callback_handle_ = this->add_on_set_parameters_callback(
+        std::bind(&TVVFVONode::on_parameter_event, this, std::placeholders::_1));
   }
 
   void TVVFVONode::setup_parameters()
@@ -187,6 +191,69 @@ namespace tvvf_vo_c
     options.smooth_weight = config_.smooth_weight;
     options.max_linear_acceleration = config_.max_linear_acceleration;
     return options;
+  }
+
+  rcl_interfaces::msg::SetParametersResult TVVFVONode::on_parameter_event(
+      const std::vector<rclcpp::Parameter>& parameters)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
+
+    double new_min_speed = cost_map_settings_.min_speed;
+    double new_max_speed = cost_map_settings_.max_speed;
+    double new_escape_speed = cost_map_settings_.escape_speed_min;
+    double new_turning_linear = cached_params_.turning_linear_speed_mps;
+    double new_max_linear_velocity = config_.max_linear_velocity;
+
+    for (const auto& param : parameters) {
+      if (param.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE) {
+        continue;
+      }
+      const auto& name = param.get_name();
+      if (name == "costmap_min_speed") {
+        new_min_speed = param.as_double();
+      } else if (name == "costmap_max_speed") {
+        new_max_speed = param.as_double();
+      } else if (name == "costmap_escape_speed_min") {
+        new_escape_speed = param.as_double();
+      } else if (name == "turning_linear_speed_mps") {
+        new_turning_linear = param.as_double();
+      } else if (name == "max_linear_velocity") {
+        new_max_linear_velocity = param.as_double();
+      }
+    }
+
+    new_min_speed = std::max(0.0, new_min_speed);
+    new_max_speed = std::max(new_min_speed, new_max_speed);
+    new_escape_speed = std::clamp(new_escape_speed, new_min_speed, new_max_speed);
+    new_turning_linear = std::max(0.0, new_turning_linear);
+    new_max_linear_velocity = std::max(0.0, new_max_linear_velocity);
+
+    cost_map_settings_.min_speed = new_min_speed;
+    cost_map_settings_.max_speed = new_max_speed;
+    cost_map_settings_.escape_speed_min = new_escape_speed;
+    cached_params_.turning_linear_speed_mps = new_turning_linear;
+    turning_linear_speed_mps_ = new_turning_linear;
+    config_.max_linear_velocity = new_max_linear_velocity;
+
+    if (global_field_generator_) {
+      global_field_generator_->setCostMapSettings(cost_map_settings_);
+    }
+
+    if (previous_velocity_command_.has_value()) {
+      auto& cmd = previous_velocity_command_.value();
+      const double norm = std::hypot(cmd.vx, cmd.vy);
+      if (norm > new_max_linear_velocity && norm > 1e-9) {
+        const double scale = new_max_linear_velocity / norm;
+        cmd.vx *= scale;
+        cmd.vy *= scale;
+      } else if (new_max_linear_velocity <= 0.0) {
+        cmd.vx = 0.0;
+        cmd.vy = 0.0;
+      }
+    }
+
+    return result;
   }
 
 } // namespace tvvf_vo_c

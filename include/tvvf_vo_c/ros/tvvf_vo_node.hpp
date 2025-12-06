@@ -12,6 +12,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 
 #include "tvvf_vo_c/core/types.hpp"
 #include "tvvf_vo_c/core/global_field_generator.hpp"
@@ -84,6 +85,7 @@ private:
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr goal_marker_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr cmd_velocity_marker_pub_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_pub_;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_handle_;
 
     // サブスクライバー
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
@@ -207,6 +209,8 @@ private:
     OptimizationOptions build_optimizer_options() const;
     void publish_command_marker(const geometry_msgs::msg::Twist& cmd_msg);
     std::optional<nav_msgs::msg::OccupancyGrid> build_combined_map() const;
+    rcl_interfaces::msg::SetParametersResult on_parameter_event(
+        const std::vector<rclcpp::Parameter>& parameters);
 
 private:
     friend class ObstaclesUnifiedTest;
@@ -235,6 +239,11 @@ private:
     bool is_valid_position(const Position& position) const;
     bool is_valid_vector(const std::array<double, 2>& vector) const;
 
+public:
+    // テスト用アクセサ
+    TVVFVOConfig debug_get_config() const { return config_; }
+    CostMapSettings debug_get_costmap_settings() const { return cost_map_settings_; }
+    double debug_get_turning_linear_speed_mps() const { return turning_linear_speed_mps_; }
 };
 
 } // namespace tvvf_vo_c
